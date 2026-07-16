@@ -1,39 +1,52 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { anneesUniversitaires } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { annees } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
 
 export async function GET() {
-  const rows = await db
-    .select()
-    .from(anneesUniversitaires)
-    .orderBy(desc(anneesUniversitaires.libelle));
-  return NextResponse.json(rows);
+  try {
+    const result = await db.select().from(annees).orderBy(desc(annees.libelle));
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { libelle, tranche, active } = body;
-
-  if (!libelle) {
-    return NextResponse.json({ error: "Libellé requis" }, { status: 400 });
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const [result] = await db.insert(annees).values({
+      libelle: body.libelle,
+      tranche: body.tranche || "Première tranche",
+      active: body.active ?? false,
+      appliquerIRSA: body.appliquerIRSA ?? true,
+      tauxIRSA: body.tauxIRSA ?? 20,
+      plafondPaiement: body.plafondPaiement || null,
+    }).returning();
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
 
-  // Si actif, désactiver les autres
-  if (active) {
-    await db
-      .update(anneesUniversitaires)
-      .set({ active: false });
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    if (!body.id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+    
+    const [result] = await db.update(annees).set({
+      libelle: body.libelle,
+      tranche: body.tranche,
+      active: body.active,
+      appliquerIRSA: body.appliquerIRSA,
+      tauxIRSA: body.tauxIRSA,
+      plafondPaiement: body.plafondPaiement || null,
+    }).where(eq(annees.id, body.id)).returning();
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  const [row] = await db
-    .insert(anneesUniversitaires)
-    .values({ libelle, tranche: tranche || "Première tranche", active: !!active })
-    .onConflictDoUpdate({
-      target: anneesUniversitaires.libelle,
-      set: { tranche: tranche || "Première tranche", active: !!active },
-    })
-    .returning();
-
-  return NextResponse.json(row);
 }

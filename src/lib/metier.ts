@@ -23,19 +23,6 @@ export const GRADE_LIBELLES: Record<string, string> = {
   PRT: "Professeur Titulaire",
 };
 
-export const ETABLISSEMENTS_TOLIARA = [
-  "CURA",
-  "DRGS",
-  "ENS",
-  "FAC LETTRES",
-  "IES-ANOSY",
-  "IES-Menabe",
-  "IES-Toliara",
-  "IHSM",
-  "MEDECINE",
-  "SCIENCES",
-];
-
 /** Calcule le total des HC brutes */
 export function calcHC(
   et: number,
@@ -50,19 +37,24 @@ export function calcHC(
 /** Retourne { hcNette, obligation } */
 export function calcHCNette(
   hc: number,
-  grade: string,
+  obligation: number,
   statut: string
-): { hcNette: number; obligation: number } {
+): { hcNette: number; obligationAppliquee: number } {
   if (statut === "Permanent") {
-    const obligation = OBLIGATION_SERVICE[grade] ?? 0;
-    return { hcNette: Math.max(hc - obligation, 0), obligation };
+    return { hcNette: Math.max(hc - obligation, 0), obligationAppliquee: obligation };
   }
-  return { hcNette: hc, obligation: 0 };
+  return { hcNette: hc, obligationAppliquee: 0 };
 }
 
 /** Calcule le montant brut */
-export function calcMontantBrut(hcArrondi: number, grade: string): number {
-  return hcArrondi * (TAUX_GRADE[grade] ?? 0);
+export function calcMontantBrut(hcArrondi: number, taux: number): number {
+  return Math.floor(hcArrondi) * taux;
+}
+
+/** Calcule l'IRSA */
+export function calcIRSA(montantBrut: number, tauxIRSA: number, appliquer: boolean): number {
+  if (!appliquer) return 0;
+  return Math.round(montantBrut * (tauxIRSA / 100));
 }
 
 /** Formate en Ariary */
@@ -116,4 +108,8 @@ export function nombreEnLettres(n: number): string {
   if (reste)     parts.push(sousMilleFR(reste));
 
   return parts.join(" ").trim();
+}
+
+export function montantEnLettres(montant: number): string {
+  return nombreEnLettres(montant) + " ARIARY";
 }

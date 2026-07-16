@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "full";
 }
 
 const SIZES = {
@@ -16,6 +16,7 @@ const SIZES = {
   lg:  "max-w-lg",
   xl:  "max-w-xl",
   "2xl": "max-w-2xl",
+  "full": "max-w-5xl",
 };
 
 export default function Modal({
@@ -27,9 +28,15 @@ export default function Modal({
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+    if (isOpen) {
+      document.addEventListener("keydown", handleKey);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose, isOpen]);
 
   if (!isOpen) return null;
 
@@ -43,7 +50,7 @@ export default function Modal({
       {/* Dialog */}
       <div
         ref={ref}
-        className={`relative w-full ${SIZES[size]} bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden`}
+        className={`relative w-full ${SIZES[size]} bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-fadeIn`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-900 to-indigo-700 text-white rounded-t-2xl shrink-0">

@@ -1,25 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { gradesTaux } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { grades } from "@/db/schema";
+import { asc, eq } from "drizzle-orm";
 
 export async function GET() {
-  const rows = await db
-    .select()
-    .from(gradesTaux)
-    .orderBy(gradesTaux.tauxHoraire);
-  return NextResponse.json(rows);
+  try {
+    const result = await db.select().from(grades).orderBy(asc(grades.tauxHoraire));
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
-export async function PUT(req: NextRequest) {
-  const body = await req.json();
-  const { id, tauxHoraire, obligationService } = body;
-  if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
-
-  const [row] = await db
-    .update(gradesTaux)
-    .set({ tauxHoraire, obligationService })
-    .where(eq(gradesTaux.id, id))
-    .returning();
-  return NextResponse.json(row);
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    if (!body.id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+    
+    const [result] = await db.update(grades).set({
+      tauxHoraire: body.tauxHoraire,
+      obligationService: body.obligationService,
+    }).where(eq(grades.id, body.id)).returning();
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
