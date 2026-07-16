@@ -251,10 +251,13 @@ export default function HomePage() {
     setShowEnsModal(true);
   };
 
+  const [returnToHeuresAfterCreate, setReturnToHeuresAfterCreate] = useState(false);
+
   const handleSaveEns = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
     try {
+      let newEnseignant = null;
       if (editEns?.id) {
         await fetch(`/api/enseignants/${editEns.id}`, {
           method: "PUT",
@@ -262,15 +265,38 @@ export default function HomePage() {
           body: JSON.stringify(ensForm),
         });
       } else {
-        await fetch("/api/enseignants", {
+        const res = await fetch("/api/enseignants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(ensForm),
         });
+        newEnseignant = await res.json();
       }
       setShowEnsModal(false);
       await loadEnseignants();
       await loadAllEnseignants();
+      
+      // Si on vient de la saisie heures, retourner et sélectionner le nouvel enseignant
+      if (returnToHeuresAfterCreate && newEnseignant) {
+        setSelectedEnsForHeures({
+          id: newEnseignant.id,
+          nomPrenom: newEnseignant.nomPrenom,
+          cin: newEnseignant.cin,
+          statut: newEnseignant.statut,
+          gradeId: newEnseignant.gradeId,
+          gradeCode: null,
+          gradeTaux: null,
+          gradeObligation: null,
+          etablissementPrincipal: newEnseignant.etablissementPrincipal,
+          rib: newEnseignant.rib,
+          specialite: newEnseignant.specialite,
+          telephone: newEnseignant.telephone,
+          email: newEnseignant.email,
+        });
+        setEnsSearchQuery(newEnseignant.nomPrenom);
+        setShowAddHeuresModal(true);
+        setReturnToHeuresAfterCreate(false);
+      }
     } finally {
       setFormLoading(false);
     }
@@ -322,6 +348,21 @@ export default function HomePage() {
       email: null,
     });
     setShowEnsDropdown(false);
+  };
+
+  // Ouvrir le formulaire complet pour créer un enseignant depuis la saisie heures
+  const handleOpenCreateEnseignant = () => {
+    setEditEns(null);
+    setEnsForm({
+      nomPrenom: ensSearchQuery, // Pré-remplir avec la recherche
+      cin: "", dateNaissance: "", lieuNaissance: "",
+      nationalite: "Malagasy", adresse: "", telephone: "", email: "",
+      rib: "", banque: "", statut: "Vacataire", specialite: "",
+      gradeId: "", etablissementPrincipal: "", dateRecrutement: "",
+    });
+    setReturnToHeuresAfterCreate(true); // Marquer pour retour après création
+    setShowAddHeuresModal(false); // Fermer la modal heures
+    setShowEnsModal(true); // Ouvrir la modal enseignant
   };
 
   const handleAddHeuresForSelected = async () => {
@@ -785,54 +826,88 @@ export default function HomePage() {
 
       {/* Modal Saisie Heures avec Autocomplete */}
       <Modal isOpen={showAddHeuresModal} onClose={() => setShowAddHeuresModal(false)}
-        title="📋 Saisir des Heures Complémentaires" size="2xl">
-        <div className="space-y-4">
+        title="📋 Saisir des Heures Complémentaires" size="full">
+        <div className="space-y-5">
           {/* Recherche enseignant */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Enseignant <span className="text-slate-400">(rechercher ou créer)</span>
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
+            <label className="block text-base font-semibold text-slate-800 mb-3">
+              🔍 Rechercher un enseignant
             </label>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Tapez le nom de l'enseignant..."
-                value={ensSearchQuery}
-                onChange={(e) => setEnsSearchQuery(e.target.value)}
-                onFocus={() => ensSearchQuery.length >= 2 && setShowEnsDropdown(true)}
-                className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+            
+            <div className="flex gap-3">
+              {/* Search input */}
+              <div className="relative flex-1">
+                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tapez le nom de l'enseignant..."
+                  value={ensSearchQuery}
+                  onChange={(e) => setEnsSearchQuery(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 text-base border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white shadow-sm"
+                />
+              </div>
+              
+              {/* Bouton Créer visible directement */}
+              {ensSearchQuery.length >= 2 && !selectedEnsForHeures && (
+                <button
+                  onClick={handleOpenCreateEnseignant}
+                  className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-md whitespace-nowrap"
+                >
+                  <Plus size={20} />
+                  Créer &quot;{ensSearchQuery}&quot;
+                </button>
+              )}
             </div>
             
-            {/* Dropdown */}
-            {showEnsDropdown && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            {/* Liste des résultats */}
+            {ensSearchQuery.length >= 2 && !selectedEnsForHeures && (
+              <div className="mt-4">
                 {ensSearchResults.length > 0 ? (
-                  ensSearchResults.map(ens => (
-                    <button
-                      key={ens.id}
-                      onClick={() => handleSelectEnsForHeures(ens)}
-                      className="w-full px-4 py-2 text-left hover:bg-indigo-50 flex items-center justify-between"
-                    >
-                      <div>
-                        <span className="font-medium">{ens.nomPrenom}</span>
-                        {ens.gradeCode && <GradeBadge grade={ens.gradeCode} />}
-                      </div>
-                      <span className="text-xs text-slate-400">{ens.etablissementPrincipal}</span>
-                    </button>
-                  ))
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                      <p className="text-xs font-medium text-slate-500">{ensSearchResults.length} enseignant(s) trouvé(s)</p>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {ensSearchResults.map(ens => (
+                        <button
+                          key={ens.id}
+                          onClick={() => handleSelectEnsForHeures(ens)}
+                          className="w-full px-4 py-3 text-left hover:bg-indigo-50 flex items-center justify-between transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                              {ens.nomPrenom.charAt(0)}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-800">{ens.nomPrenom}</span>
+                              <p className="text-xs text-slate-500">{ens.etablissementPrincipal || "Non spécifié"}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ens.gradeCode && <GradeBadge grade={ens.gradeCode} />}
+                            <StatutBadge statut={ens.statut} />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
-                  <div className="p-4 text-center">
-                    <p className="text-sm text-slate-500 mb-2">Aucun enseignant trouvé</p>
-                    <button
-                      onClick={handleCreateAndSelectEns}
-                      className="text-sm text-indigo-600 hover:underline flex items-center gap-1 mx-auto"
-                    >
-                      <Plus size={14} /> Créer "{ensSearchQuery}"
-                    </button>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+                    <AlertCircle size={20} className="text-amber-500" />
+                    <div>
+                      <p className="font-medium text-amber-800">Aucun enseignant trouvé pour &quot;{ensSearchQuery}&quot;</p>
+                      <p className="text-sm text-amber-600">Cliquez sur le bouton vert pour créer un nouvel enseignant</p>
+                    </div>
                   </div>
                 )}
               </div>
+            )}
+            
+            {ensSearchQuery.length < 2 && !selectedEnsForHeures && (
+              <p className="text-sm text-slate-500 mt-3 flex items-center gap-2">
+                <span className="inline-block w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-xs flex items-center justify-center font-bold">?</span>
+                Tapez au moins 2 caractères pour rechercher
+              </p>
             )}
           </div>
 
@@ -889,49 +964,120 @@ export default function HomePage() {
       </Modal>
 
       {/* Modal Enseignant */}
-      <Modal isOpen={showEnsModal} onClose={() => setShowEnsModal(false)}
-        title={editEns?.id ? "✏️ Modifier Enseignant" : "➕ Nouvel Enseignant"} size="2xl">
-        <form onSubmit={handleSaveEns} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Nom et Prénoms *" value={ensForm.nomPrenom}
-              onChange={(v) => setEnsForm({ ...ensForm, nomPrenom: v })} required />
-            <Input label="CIN" value={ensForm.cin}
-              onChange={(v) => setEnsForm({ ...ensForm, cin: v })} />
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Grade</label>
-              <select value={ensForm.gradeId} onChange={(e) => setEnsForm({ ...ensForm, gradeId: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                <option value="">-- Sélectionner --</option>
-                {grades.map(g => <option key={g.id} value={g.id}>{g.code} - {g.libelle}</option>)}
-              </select>
+      <Modal isOpen={showEnsModal} onClose={() => { setShowEnsModal(false); setReturnToHeuresAfterCreate(false); }}
+        title={editEns?.id ? "✏️ Modifier Enseignant" : "➕ Nouvel Enseignant"} size="full">
+        <form onSubmit={handleSaveEns} className="space-y-6">
+          {returnToHeuresAfterCreate && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+              <CheckCircle2 size={20} className="text-emerald-600" />
+              <p className="text-sm text-emerald-800">
+                Après l&apos;enregistrement, vous serez redirigé vers la saisie des heures.
+              </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Statut</label>
-              <select value={ensForm.statut} onChange={(e) => setEnsForm({ ...ensForm, statut: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                <option value="Permanent">Permanent</option>
-                <option value="Vacataire">Vacataire</option>
-              </select>
+          )}
+          
+          {/* Section Identité */}
+          <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <Users size={18} className="text-indigo-600" />
+              Identité
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <Input label="Nom et Prénoms *" value={ensForm.nomPrenom}
+                  onChange={(v) => setEnsForm({ ...ensForm, nomPrenom: v })} required />
+              </div>
+              <Input label="CIN" value={ensForm.cin}
+                onChange={(v) => setEnsForm({ ...ensForm, cin: v })} />
+              <Input label="Date de naissance" value={ensForm.dateNaissance} type="date"
+                onChange={(v) => setEnsForm({ ...ensForm, dateNaissance: v })} />
+              <Input label="Lieu de naissance" value={ensForm.lieuNaissance}
+                onChange={(v) => setEnsForm({ ...ensForm, lieuNaissance: v })} />
+              <Input label="Nationalité" value={ensForm.nationalite}
+                onChange={(v) => setEnsForm({ ...ensForm, nationalite: v })} />
             </div>
-            <Input label="Spécialité" value={ensForm.specialite}
-              onChange={(v) => setEnsForm({ ...ensForm, specialite: v })} />
-            <Input label="Établissement principal" value={ensForm.etablissementPrincipal}
-              onChange={(v) => setEnsForm({ ...ensForm, etablissementPrincipal: v })} />
-            <Input label="Téléphone" value={ensForm.telephone}
-              onChange={(v) => setEnsForm({ ...ensForm, telephone: v })} />
-            <Input label="Email" value={ensForm.email}
-              onChange={(v) => setEnsForm({ ...ensForm, email: v })} />
-            <Input label="RIB" value={ensForm.rib}
-              onChange={(v) => setEnsForm({ ...ensForm, rib: v })} />
-            <Input label="Banque" value={ensForm.banque}
-              onChange={(v) => setEnsForm({ ...ensForm, banque: v })} />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={() => setShowEnsModal(false)}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Annuler</button>
+
+          {/* Section Professionnelle */}
+          <div className="bg-indigo-50 rounded-xl p-5 border border-indigo-200">
+            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <GraduationCap size={18} className="text-indigo-600" />
+              Informations Professionnelles
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Grade *</label>
+                <select value={ensForm.gradeId} onChange={(e) => setEnsForm({ ...ensForm, gradeId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <option value="">-- Sélectionner --</option>
+                  {grades.map(g => (
+                    <option key={g.id} value={g.id}>
+                      {g.code} - {g.libelle} ({g.tauxHoraire.toLocaleString()} Ar/h)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Statut *</label>
+                <select value={ensForm.statut} onChange={(e) => setEnsForm({ ...ensForm, statut: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <option value="Permanent">Permanent</option>
+                  <option value="Vacataire">Vacataire</option>
+                </select>
+              </div>
+              <Input label="Date de recrutement" value={ensForm.dateRecrutement} type="date"
+                onChange={(v) => setEnsForm({ ...ensForm, dateRecrutement: v })} />
+              <Input label="Spécialité" value={ensForm.specialite}
+                onChange={(v) => setEnsForm({ ...ensForm, specialite: v })} />
+              <div className="col-span-2">
+                <Input label="Établissement principal" value={ensForm.etablissementPrincipal}
+                  onChange={(v) => setEnsForm({ ...ensForm, etablissementPrincipal: v })} />
+              </div>
+            </div>
+          </div>
+
+          {/* Section Contact */}
+          <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-200">
+            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <FileText size={18} className="text-emerald-600" />
+              Contact & Coordonnées Bancaires
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Téléphone" value={ensForm.telephone}
+                onChange={(v) => setEnsForm({ ...ensForm, telephone: v })} />
+              <Input label="Email" value={ensForm.email}
+                onChange={(v) => setEnsForm({ ...ensForm, email: v })} />
+              <div className="col-span-3">
+                <Input label="Adresse" value={ensForm.adresse}
+                  onChange={(v) => setEnsForm({ ...ensForm, adresse: v })} />
+              </div>
+              <div className="col-span-2">
+                <Input label="RIB (Relevé d'Identité Bancaire)" value={ensForm.rib}
+                  onChange={(v) => setEnsForm({ ...ensForm, rib: v })} />
+              </div>
+              <Input label="Banque" value={ensForm.banque}
+                onChange={(v) => setEnsForm({ ...ensForm, banque: v })} />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+            <button type="button" onClick={() => { setShowEnsModal(false); setReturnToHeuresAfterCreate(false); }}
+              className="px-5 py-2.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 font-medium">
+              Annuler
+            </button>
             <button type="submit" disabled={formLoading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-              {formLoading ? "..." : "Enregistrer"}
+              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 shadow-md">
+              {formLoading ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  {editEns?.id ? "Mettre à jour" : "Créer l'enseignant"}
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -1341,19 +1487,19 @@ function StatCard({ icon, label, value, sub, color }: {
   );
 }
 
-function Input({ label, value, onChange, required = false, placeholder = "" }: {
-  label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string;
+function Input({ label, value, onChange, required = false, placeholder = "", type = "text" }: {
+  label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; type?: string;
 }) {
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
       <input
-        type="text"
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
         placeholder={placeholder}
-        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
       />
     </div>
   );

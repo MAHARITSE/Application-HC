@@ -4,6 +4,8 @@
 
 Application web moderne pour gérer les heures complémentaires des enseignants du supérieur à Madagascar. Développée avec Next.js (App Router), PostgreSQL via Drizzle ORM, et Tailwind CSS.
 
+---
+
 ## Architecture de la Base de Données
 
 ### Tables principales
@@ -25,83 +27,102 @@ Application web moderne pour gérer les heures complémentaires des enseignants 
 - code: varchar(10) UNIQUE (A, MC, PR, PRT)
 - libelle: varchar(100)
 - tauxHoraire: integer (en Ariary)
-- obligationService: integer (heures d'obligation)
 ```
 
 **Taux par défaut:**
-| Grade | Libellé | Taux | Obligation |
-|-------|---------|------|------------|
-| A | Assistant | 6 000 Ar | 192h |
-| MC | Maître de Conférences | 8 000 Ar | 128h |
-| PR | Professeur | 10 000 Ar | 96h |
-| PRT | Professeur Titulaire | 12 000 Ar | 96h |
+| Grade | Libellé | Taux |
+|-------|---------|------|
+| A | Assistant | 6 000 Ar |
+| MC | Maître de Conférences | 8 000 Ar |
+| PR | Professeur | 10 000 Ar |
+| PRT | Professeur Titulaire | 12 000 Ar |
 
-#### 3. `facultes` — Structure Académique
+#### 3. `facultes` — Structure Académique (Hiérarchie)
 ```sql
 - id: serial PRIMARY KEY
-- etablissement: varchar(200) (Faculté des Sciences, ENS, etc.)
-- mention: varchar(200)
+- etablissement: varchar(200) NOT NULL *
+- domaine: varchar(200) NOT NULL *
+- mention: varchar(200) NOT NULL *
 - parcours: varchar(200)
-- niveau: varchar(50) (L1, L2, L3, M1, M2)
+- niveau: varchar(50)
 - code: varchar(20)
 ```
 
-#### 4. `enseignants` — Base des Enseignants (permanente)
+**Règles:**
+- Champs obligatoires: Établissement, Domaine, Mention
+- Champs optionnels: Parcours, Niveau
+- Vérification des doublons avant insertion
+- Saisie assistée (autocomplete) pour tous les champs
+- Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau
+
+#### 4. `enseignants` — Base des Enseignants (informations permanentes)
 ```sql
 - id: serial PRIMARY KEY
-- nomPrenom: varchar(300) NOT NULL
+- nom: varchar(150) NOT NULL          -- Toujours en MAJUSCULES *
+- prenom: varchar(200)                 -- Title Case (pas obligatoire)
 - cin: varchar(50)
+- dateCIN: date                        -- Date de délivrance du CIN
 - dateNaissance: date
 - lieuNaissance: varchar(200)
-- nationalite: varchar(100)
-- adresse: text
-- telephone: varchar(50)
+- nationalite: varchar(100) DEFAULT 'Malagasy'
+- adresse: text                        -- Title Case
+- telephone: varchar(20)               -- Format: 000 00 000 00
 - email: varchar(200)
-- rib: varchar(100)
-- banque: varchar(100)
-- statut: varchar(20) (Permanent | Vacataire)
+- rib: varchar(30)                     -- Format: 00005 00001 12094250100 09
 - specialite: varchar(200)
-- gradeId: integer REFERENCES grades(id)
 - etablissementPrincipal: varchar(200)
 - dateRecrutement: date
 ```
 
-#### 5. `heures` — Heures par Année/Enseignant/Faculté
+**⚠️ IMPORTANT:** 
+- Le **statut** (Permanent/Vacataire) n'est PAS dans cette table
+- Le **grade** n'est PAS dans cette table
+- Ces informations sont saisies lors de la saisie des HC car elles peuvent changer
+
+**Règles de formatage:**
+- `nom`: Automatiquement converti en MAJUSCULES (obligatoire)
+- `prenom`: Title Case - première lettre de chaque mot en majuscule (optionnel)
+- `adresse`: Title Case
+- `telephone`: Masque de saisie `000 00 000 00`
+- `rib`: Masque de saisie `00005 00001 12094250100 09`
+
+#### 5. `heures` — Heures par Année/Enseignant (CONTIENT GRADE ET STATUT)
 ```sql
 - id: serial PRIMARY KEY
 - enseignantId: integer REFERENCES enseignants(id) ON DELETE CASCADE
 - anneeId: integer REFERENCES annees(id) ON DELETE CASCADE
 - faculteId: integer REFERENCES facultes(id)
-- heuresET: real (Enseignement Théorique)
-- heuresED: real (Enseignement Dirigé)
-- heuresEP: real (Enseignement Pratique)
-- heuresSoutenance: real
-- heuresRecherche: real
+- gradeId: integer REFERENCES grades(id)    -- Grade AU MOMENT de la saisie
+- statut: varchar(20) NOT NULL              -- Permanent | Vacataire AU MOMENT de la saisie
+- heuresET: real DEFAULT 0
+- heuresED: real DEFAULT 0
+- heuresEP: real DEFAULT 0
+- heuresSoutenance: real DEFAULT 0
+- heuresRecherche: real DEFAULT 0
+- obligation: real DEFAULT 125              -- Défaut 125h, 0 pour vacataires
 ```
 
-#### 6. `obligations` — Obligation de Service par Année
+**⚠️ IMPORTANT:**
+- Le **gradeId** est stocké ICI car un enseignant peut changer de grade au fil des années
+- Le **statut** est stocké ICI car il peut aussi changer
+- Cela permet de garder l'historique correct des anciennes années
+- L'**obligation** est saisie ici (défaut 125h, pas obligatoire, 0 pour vacataires)
+
+#### 6. `paiements` — Avances et Paiements par Tranches
 ```sql
 - id: serial PRIMARY KEY
 - enseignantId: integer REFERENCES enseignants(id)
 - anneeId: integer REFERENCES annees(id)
-- heuresObligation: real (personnalisable, défaut selon grade)
-- exempte: boolean (si responsabilité administrative)
-- motifExemption: text
-```
-
-#### 7. `paiements` — Avances et Paiements par Tranches
-```sql
-- id: serial PRIMARY KEY
-- enseignantId: integer REFERENCES enseignants(id)
-- anneeId: integer REFERENCES annees(id)
-- montantAvance: real
+- montantAvance: real DEFAULT 0
 - dateAvance: date
-- pourcentageTranche: real (ex: 50%, 100%)
-- montantPaye: real
+- pourcentageTranche: real
+- montantPaye: real DEFAULT 0
 - datePaiement: date
 - reference: varchar(100)
-- statut: varchar(30) (En attente | Partiel | Payé)
+- statut: varchar(30) DEFAULT 'En attente'
 ```
+
+---
 
 ## Règles de Gestion
 
@@ -110,14 +131,16 @@ Application web moderne pour gérer les heures complémentaires des enseignants 
 ```
 HC Brut = ET + ED + EP + Soutenance + Recherche
 
-Si statut = "Permanent" ET non exempté:
+Obligation = valeur saisie (défaut 125h, 0 pour vacataires)
+
+Si statut = "Permanent" ET obligation > 0:
     HC Nette = max(0, HC Brut - Obligation)
-Sinon:
+Sinon (Vacataire ou obligation = 0):
     HC Nette = HC Brut
 
-HC Arrondie = floor(HC Nette)  // Arrondi à l'entier inférieur
+HC Arrondie = floor(HC Nette)
 
-Montant Brut = HC Arrondie × Taux Horaire (selon grade)
+Montant Brut = HC Arrondie × Taux Horaire (selon grade STOCKÉ dans heures)
 
 Si plafond défini ET Montant Brut > plafond:
     Montant Brut = plafond
@@ -131,135 +154,196 @@ Montant Net = Montant Brut - IRSA
 Net à Payer = Montant Net - Total Avances
 ```
 
-### Option IRSA par Année
-- Chaque année universitaire peut avoir l'IRSA activé ou non
-- Le taux IRSA est configurable (défaut: 20%)
-- L'indicateur visuel dans l'en-tête montre le statut IRSA
+### Pourquoi stocker Grade et Statut dans les Heures?
+- Un enseignant Assistant (A) peut devenir Maître de Conférences (MC)
+- Un Vacataire peut devenir Permanent
+- Les anciennes années doivent garder le grade/statut DE L'ÉPOQUE
+- Sinon les calculs seraient faussés rétroactivement
 
-### Paiement par Tranches
-- Possibilité de payer en plusieurs tranches (ex: 50%, puis 50%)
-- Gestion des avances avec date
-- Suivi du statut de paiement (En attente, Partiel, Payé)
-
-### Plafonnement
-- L'État peut définir un plafond maximum par enseignant/année
-- Si le montant brut dépasse le plafond, il est plafonné
+---
 
 ## Fonctionnalités de l'Interface
 
 ### En-tête
-- Logo et nom de l'application
-- Sélecteur d'année universitaire (se place sur la dernière année au lancement)
-- Indicateur IRSA (rouge si actif, vert si non)
-- Accès aux paramètres
+- Logo "HC-Manager"
+- Sélecteur d'année (se place sur la DERNIÈRE année au lancement)
+- Indicateur de tranche
+- Indicateur IRSA (rouge/vert)
+- Accès paramètres
 
-### Tableau de Bord
-- Cartes statistiques (enseignants, heures, montant, facultés, grades)
-- Barre de recherche par nom ou établissement
-- Filtres par statut et grade
-- Tableau récapitulatif avec toutes les colonnes
+### Barre d'outils principale
+- 🔍 Recherche
+- Filtres (statut, grade)
+- **📋 Saisir Heures** — Bouton principal
+- **🏛️ Facultés** — Gestion des facultés
+- **👥 Enseignants** — Liste de TOUS les enseignants (NOUVEAU)
+- **🎓 Grades** — Gestion des grades
 
-### Actions par Enseignant
-- ✏️ Modifier les informations
-- 📊 Gérer les heures (par faculté/parcours)
-- 📄 Générer la fiche individuelle
-- 💰 Préparer le paiement
+### Bouton "Enseignants" (NOUVEAU)
+- Affiche la liste complète de TOUS les enseignants de la base
+- Recherche par nom/prénom
+- Permet de:
+  - Voir les détails
+  - Modifier les informations (nom, prénom, CIN, contact, RIB...)
+  - Supprimer un enseignant
+- Utile pour mettre à jour les informations de base
+
+### Bouton "Saisir Heures" (Principal)
+- Modal grande taille
+- **Étape 1: Rechercher/Créer l'enseignant**
+  - Autocomplete sur la base
+  - Bouton "Créer" visible directement
+  - Si création: formulaire avec infos de base (nom, prénom, contact...)
+  
+- **Étape 2: Saisir les informations HC**
+  - **Grade** * (sélection obligatoire) — stocké dans heures
+  - **Statut** * (Permanent/Vacataire) — stocké dans heures
+  - Faculté (saisie assistée)
+  - Heures: ET, ED, EP, Soutenance, Recherche
+  - **Obligation** (défaut 125h, mettre 0 pour vacataire)
+
+### Bouton "Facultés"
+- Affiche la liste des facultés/parcours
+- Formulaire d'ajout avec saisie assistée:
+  - Établissement * (obligatoire)
+  - Domaine * (obligatoire)
+  - Mention * (obligatoire)
+  - Parcours (optionnel)
+  - Niveau (optionnel)
+- Vérification doublons
+- Suppression possible
+
+### Tableau Principal
+Colonnes:
+- N°
+- Nom et Prénoms
+- **Grade** (celui stocké dans heures)
+- **Statut** (celui stocké dans heures)
+- Établissement
+- ET, ED, EP, Sout., Rech.
+- HC Brut
+- Obligation
+- HC Net
+- Brut (Ar)
+- IRSA
+- Net (Ar)
+- Actions
+
+### Actions par ligne
+- ✏️ Modifier (infos enseignant)
+- 📊 Heures (gérer les heures)
+- 💰 Paiement (préparer paiement)
+- 📄 Fiche (générer PDF)
 - 🗑️ Supprimer
 
-### Modals
-1. **Enseignant**: Formulaire complet avec saisie assistée
-2. **Heures**: Ventilation par faculté (ET, ED, EP, Sout., Rech.)
-3. **Fiche Individuelle**: PDF imprimable
-4. **Préparation Paiement**: Pourcentage, détection automatique IRSA/tranche
-5. **Facultés**: CRUD établissements/parcours
-6. **Années**: Configuration IRSA, plafond, tranche
-7. **Grades**: Modification taux et obligations
+### Formulaire Enseignant (Informations de base)
+**Section Identité:**
+- Nom * (MAJUSCULES automatiques)
+- Prénom (Title Case, optionnel)
+- CIN
+- Date CIN
+- Date de naissance
+- Lieu de naissance
+- Nationalité (défaut: Malagasy)
 
-### Fiche Individuelle de Paiement
-- En-tête avec année et numéro d'état
-- Informations enseignant
-- Détail des heures par établissement
-- Calcul complet (brut, IRSA, net)
-- Montant en toutes lettres
-- Zone signatures
+**Section Contact:**
+- Téléphone (masque: 000 00 000 00)
+- Email
+- Adresse (Title Case)
+- RIB (masque: 00005 00001 12094250100 09)
 
-## Technologies
+**Section Professionnelle:**
+- Spécialité
+- Établissement principal
+- Date de recrutement
 
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS 4
-- **Backend**: API Routes Next.js
-- **Base de données**: PostgreSQL avec Drizzle ORM
-- **Icônes**: Lucide React
-- **Impression**: CSS @media print
+**⚠️ PAS de Grade ni Statut ici** — ces infos sont dans la saisie HC
+
+### Formulaire Saisie HC
+- Enseignant (recherche/sélection)
+- **Grade** * (A, MC, PR, PRT)
+- **Statut** * (Permanent, Vacataire)
+- Faculté (saisie assistée)
+- Heures: ET, ED, EP, Soutenance, Recherche
+- **Obligation** (défaut 125h)
+
+---
+
+## Masques de Saisie
+
+| Champ | Format | Exemple | Auto |
+|-------|--------|---------|------|
+| Nom | MAJUSCULES | RAKOTO | Oui |
+| Prénom | Title Case | Jean Pierre | Oui |
+| Téléphone | 000 00 000 00 | 034 12 345 67 | Masque |
+| RIB | 00005 00001 12094250100 09 | 00005 00001 12094250100 09 | Masque |
+| Adresse | Title Case | Lot II A 25 Andravohangy | Oui |
+
+---
 
 ## API Routes
 
 | Route | Méthodes | Description |
 |-------|----------|-------------|
-| `/api/seed` | POST | Initialisation de la base |
-| `/api/annees` | GET, POST, PUT | Gestion des années |
-| `/api/grades` | GET, PUT | Gestion des grades |
-| `/api/facultes` | GET, POST, DELETE | Gestion des facultés |
-| `/api/enseignants` | GET, POST | Liste et création enseignants |
+| `/api/seed` | POST | Initialisation |
+| `/api/annees` | GET, POST, PUT | Années (avec IRSA) |
+| `/api/grades` | GET, PUT | Grades et taux |
+| `/api/facultes` | GET, POST, DELETE | Facultés avec vérif doublons |
+| `/api/enseignants` | GET, POST | Liste et création |
 | `/api/enseignants/[id]` | GET, PUT, DELETE | CRUD enseignant |
-| `/api/heures` | GET, POST | Heures par enseignant/année |
-| `/api/heures/[id]` | PUT, DELETE | Modification/suppression heures |
-| `/api/obligations` | GET, POST | Obligations de service |
-| `/api/paiements` | GET, POST | Gestion des paiements |
-| `/api/export/fiche` | GET | Génération fiche individuelle |
+| `/api/heures` | GET, POST | Heures (avec grade/statut) |
+| `/api/heures/[id]` | PUT, DELETE | Modification heures |
+| `/api/paiements` | GET, POST | Paiements |
+| `/api/export/fiche` | GET | Fiche individuelle |
 
-## Installation et Lancement
+---
 
-```bash
-# Installation des dépendances
-npm install
+## Workflow Utilisateur
 
-# Configuration base de données
-# Créer .env avec DATABASE_URL=postgresql://...
+### 1. Configuration
+- Créer/configurer l'année
+- Activer/désactiver IRSA
+- Vérifier grades et taux
 
-# Appliquer le schéma
-npx drizzle-kit push
+### 2. Gestion Facultés
+- Cliquer "Facultés"
+- Ajouter: Établissement → Domaine → Mention → Parcours
+- Saisie assistée + vérif doublons
 
-# Lancer le serveur de développement
-npm run dev
+### 3. Saisie HC
+- Cliquer "Saisir Heures"
+- Rechercher enseignant (ou créer)
+- **Sélectionner Grade et Statut** (stockés avec les heures)
+- Sélectionner faculté
+- Saisir heures + obligation
 
-# Build production
-npm run build
-npm start
-```
+### 4. Mise à jour Enseignant
+- Cliquer "Enseignants"
+- Rechercher l'enseignant
+- Modifier ses infos (contact, RIB, etc.)
 
-## Workflow Utilisateur Typique
+### 5. Paiements
+- Cliquer 💰 sur un enseignant
+- Vérifier détection IRSA/tranche
+- Saisir pourcentage
+- Valider
 
-1. **Configuration initiale**
-   - Créer/configurer l'année universitaire
-   - Activer/désactiver IRSA, définir taux et plafond
-   - Vérifier les grades et taux horaires
+### 6. Fiches
+- Cliquer 📄
+- Saisir N° état
+- Imprimer/PDF
 
-2. **Gestion des enseignants**
-   - Les enseignants sont dans une base permanente
-   - Ajouter uniquement les nouveaux
+---
 
-3. **Saisie des heures**
-   - Sélectionner l'année en cours
-   - Pour chaque enseignant, ajouter ses heures par faculté
-   - Saisie assistée avec suggestion des enseignants existants
+## Points Clés
 
-4. **Vérification**
-   - Consulter le tableau récapitulatif
-   - Vérifier les calculs automatiques
-
-5. **Préparation des paiements**
-   - Cliquer sur "Préparer paiement"
-   - Saisir le pourcentage de la tranche
-   - Validation avec détection automatique IRSA
-
-6. **Génération des fiches**
-   - Générer les fiches individuelles
-   - Imprimer ou exporter en PDF
-
-## Notes Importantes
-
-- L'obligation de service de 125h (ou selon grade) n'est appliquée qu'une seule fois par année
-- Un enseignant peut être exempté d'obligation s'il a des responsabilités
-- Les vacataires n'ont pas d'obligation de service
-- Le montant est toujours arrondi à l'entier inférieur avant calcul
-- L'IRSA est configurable par année (peut être désactivé)
+| Concept | Explication |
+|---------|-------------|
+| Grade dans Heures | Permet de garder l'historique si promotion |
+| Statut dans Heures | Permet de garder l'historique si changement |
+| Obligation dans Heures | Défaut 125h, modifiable, 0 pour vacataire |
+| Bouton Enseignants | Pour voir/modifier TOUS les enseignants |
+| Saisie assistée | Partout (enseignants, facultés) |
+| Vérif doublons | Facultés et enseignants |
+| IRSA par année | Activable/désactivable |
+| Dernière année | Sélectionnée par défaut au lancement |
