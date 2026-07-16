@@ -1,72 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { enseignants } from "@/db/schema";
-import { ilike, or, desc } from "drizzle-orm";
+import { enseignants, gradesTaux, heuresEnseignement } from "@/db/schema";
+import { eq, ilike, or, sql, asc } from "drizzle-orm";
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const search = searchParams.get("search") || "";
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const search  = searchParams.get("search") || "";
+  const anneeId = searchParams.get("anneeId") ? Number(searchParams.get("anneeId")) : null;
 
-  try {
-    let query;
-    if (search) {
-      query = db
-        .select()
-        .from(enseignants)
-        .where(
-          or(
-            ilike(enseignants.nom, `%${search}%`),
-            ilike(enseignants.prenoms, `%${search}%`),
-            ilike(enseignants.etablissement, `%${search}%`)
-          )
-        )
-        .orderBy(desc(enseignants.updatedAt));
-    } else {
-      query = db
-        .select()
-        .from(enseignants)
-        .orderBy(desc(enseignants.updatedAt));
-    }
+  // Jointure enseignant + grade + agrégat des heures
+  const rows = await db.execute(sql`
+    SELECT
+      e.id,
+      e.nom_prenom,
+      e.cin,
+      e.date_naissance,
+      e.lieu_naissance,
+      e.nationalite,
+      e.adresse,
+      e.telephone,
+      e.email,
+      e.rib,
+      e.banque,
+      e.statut,
+      e.specialite,
+      e.etablissement_principal,
+      e.date_recrutement,
+      e.created_at,
+      e.grade_id,
+      g.code            AS grade_code,
+      g.libelle         AS grade_libelle,
+      g.taux_horaire,
+      g.obligation_service,
+      COALESCE(SUM(h.et),0)          AS total_et,
+      COALESCE(SUM(h.ed),0)          AS total_ed,
+      COALESCE(SUM(h.ep),0)          AS total_ep,
+      COALESCE(SUM(h.soutenance),0)  AS total_soutenance,
+      COALESCE(SUM(h.recherche),0)   AS total_recherche,
+      COALESCE(SUM(h.avance),0)      AS total_avance
+    FROM enseignants e
+    LEFT JOIN grades_taux g ON e.grade_id = g.id
+    LEFT JOIN heures_enseignement h ON h.enseignant_id = e.id
+      ${anneeId ? sql`AND h.annee_id = ${anneeId}` : sql``}
+    WHERE (
+      e.nom_prenom ILIKE ${"%" + search + "%"}
+      OR e.etablissement_principal ILIKE ${"%" + search + "%"}
+      OR e.cin ILIKE ${"%" + search + "%"}
+    )
+    GROUP BY e.id, g.id
+    ORDER BY e.nom_prenom ASC
+  `);
 
-    const results = await query;
-    return NextResponse.json(results);
-  } catch (error) {
-    console.error("Error fetching enseignants:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de la récupération des enseignants" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(rows.rows);
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const result = await db
-      .insert(enseignants)
-      .values({
-        nom: body.nom,
-        prenoms: body.prenoms,
-        grade: body.grade,
-        etablissement: body.etablissement,
-        statut: body.statut,
-        heuresET: String(body.heuresET || 0),
-        heuresED: String(body.heuresED || 0),
-        heuresEP: String(body.heuresEP || 0),
-        heuresSoutenance: String(body.heuresSoutenance || 0),
-        heuresRecherche: String(body.heuresRecherche || 0),
-        rib: body.rib || "",
-        avance: String(body.avance || 0),
-        dateAvance: body.dateAvance || "",
-      })
-      .returning();
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const {
+    nomPrenom, cin, dateNaissance, lieuNaissance, nationalite,
+    adresse, telephone, email, rib, banque, statut, specialite,
+    gradeId, etablissementPrincipal, dateRecrutement,
+  } = body;
 
-    return NextResponse.json(result[0], { status: 201 });
-  } catch (error) {
-    console.error("Error creating enseignant:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de la création de l'enseignant" },
-      { status: 500 }
-    );
+  if (!nomPrenom || !statut) {
+    return NextResponse.json({ error: "Nom et statut requis" }, { status: 400 });
   }
+
+  const [row] = await db
+    .insert(enseignants)
+    .values({
+      nomPrenom, cin, dateNaissance, lieuNaissance,
+      nationalite: nationalite || "Malgache",
+      adresse, telephone, email, rib, banque,
+      statut, specialite,
+      gradeId: gradeId ? Number(gradeId) : null,
+      etablissementPrincipal, dateRecrutement,
+    })
+    .returning();
+
+  return NextResponse.json(row, { status: 201 });
 }

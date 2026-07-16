@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HC Enseignants - Gestion des Heures Complémentaires",
-  description:
-    "Application de gestion des heures complémentaires des enseignants du supérieur",
+  title: "HC Manager – Université de Toliara",
+  description: "Gestion des Heures Complémentaires des Enseignants du Supérieur",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="fr">
-      <body className="bg-slate-50 text-slate-900 antialiased min-h-screen">
+      <body className="antialiased bg-gray-50 min-h-screen">
         {children}
       </body>
     </html>
