@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "code": "A",
+    "libelle": "Assistant",
+    "tauxHoraire": 6000
+  },
+  {
+    "id": 2,
+    "code": "MC",
+    "libelle": "Maître de Conférences",
+    "tauxHoraire": 8000
+  },
+  {
+    "id": 3,
+    "code": "PR",
+    "libelle": "Professeur",
+    "tauxHoraire": 10000
+  },
+  {
+    "id": 4,
+    "code": "PRT",
+    "libelle": "Professeur Titulaire",
+    "tauxHoraire": 12000
+  }
+]

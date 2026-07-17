@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "etablissement": "Université de Toliara",
+    "domaine": "Sciences et Technologies",
+    "mention": "Informatique",
+    "parcours": "Génie Logiciel",
+    "niveau": "L3",
+    "code": "UT-ST-INFO-GL"
+  },
+  {
+    "id": 2,
+    "etablissement": "Université de Toliara",
+    "domaine": "Sciences et Technologies",
+    "mention": "Informatique",
+    "parcours": "Réseaux et Systèmes",
+    "niveau": "L3",
+    "code": "UT-ST-INFO-RS"
+  },
+  {
+    "id": 3,
+    "etablissement": "Université de Toliara",
+    "domaine": "Sciences et Technologies",
+    "mention": "Mathématiques",
+    "parcours": "Mathématiques Appliquées",
+    "niveau": "M1",
+    "code": "UT-ST-MATH-MA"
+  },
+  {
+    "id": 4,
+    "etablissement": "Université de Toliara",
+    "domaine": "Lettres et Sciences Humaines",
+    "mention": "Lettres Modernes",
+    "parcours": "Littérature Malgache",
+    "niveau": "L2",
+    "code": "UT-LSH-LM-LIT"
+  },
+  {
+    "id": 5,
+    "etablissement": "Université de Toliara",
+    "domaine": "Sciences et Technologies",
+    "mention": "Génie Civil",
+    "parcours": "Bâtiment et Travaux Publics",
+    "niveau": "M2",
+    "code": "UT-ST-GC-BTP"
+  },
+  {
+    "id": 6,
+    "etablissement": "ENS Toliara",
+    "domaine": "Sciences de l'Éducation",
+    "mention": "Sciences Physiques",
+    "parcours": "Physique-Chimie",
+    "niveau": "L3",
+    "code": "ENS-SE-SP-PC"
+  },
+  {
+    "id": 7,
+    "etablissement": "IHSM",
+    "domaine": "Sciences de la Mer",
+    "mention": "Oceanographie",
+    "parcours": "Halieutique",
+    "niveau": "M1",
+    "code": "IHSM-SM-OCEAN-HAL"
+  },
+  {
+    "id": 8,
+    "etablissement": "Université de Toliara",
+    "domaine": "Droit, Economie, Gestion",
+    "mention": "Droit Public",
+    "parcours": "Droit Public Interne",
+    "niveau": "M1",
+    "code": "UT-DEG-DPUB"
+  }
+]

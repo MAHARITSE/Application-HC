@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "libelle": "2023-2024",
+    "tranche": "Première tranche",
+    "active": false,
+    "appliquerIRSA": true,
+    "tauxIRSA": 20,
+    "plafondPaiement": null
+  },
+  {
+    "id": 2,
+    "libelle": "2024-2025",
+    "tranche": "Première tranche",
+    "active": true,
+    "appliquerIRSA": true,
+    "tauxIRSA": 20,
+    "plafondPaiement": null
+  },
+  {
+    "id": 3,
+    "libelle": "2025-2026",
+    "tranche": "Première tranche",
+    "active": false,
+    "appliquerIRSA": false,
+    "tauxIRSA": 20,
+    "plafondPaiement": null
+  }
+]
