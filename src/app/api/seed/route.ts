@@ -5,17 +5,20 @@ import { eq } from "drizzle-orm";
 
 export async function POST() {
   try {
-    // Seed grades
+    // Seed grades - taux selon prompt.md
     const gradeData = [
-      { code: "A", libelle: "Assistant", tauxHoraire: 6000, obligationService: 192 },
-      { code: "MC", libelle: "Maître de Conférences", tauxHoraire: 8000, obligationService: 128 },
-      { code: "PR", libelle: "Professeur", tauxHoraire: 10000, obligationService: 96 },
-      { code: "PRT", libelle: "Professeur Titulaire", tauxHoraire: 12000, obligationService: 96 },
+      { code: "A", libelle: "Assistant", tauxHoraire: 6000 },
+      { code: "MC", libelle: "Maître de Conférences", tauxHoraire: 8000 },
+      { code: "PR", libelle: "Professeur", tauxHoraire: 10000 },
+      { code: "PRT", libelle: "Professeur Titulaire", tauxHoraire: 12000 },
     ];
     for (const g of gradeData) {
       const existing = await db.select().from(grades).where(eq(grades.code, g.code));
       if (existing.length === 0) {
         await db.insert(grades).values(g);
+      } else {
+        // Met à jour taux si changé
+        await db.update(grades).set({ tauxHoraire: g.tauxHoraire, libelle: g.libelle }).where(eq(grades.code, g.code));
       }
     }
 
@@ -32,24 +35,89 @@ export async function POST() {
       }
     }
 
-    // Seed facultés
+    // Seed facultés avec hiérarchie complète Établissement -> Domaine -> Mention
     const facultesData = [
-      { etablissement: "Faculté des Sciences", mention: "Informatique", parcours: "Génie Logiciel", niveau: "L3", code: "FS-INFO-GL" },
-      { etablissement: "Faculté des Sciences", mention: "Informatique", parcours: "Réseaux", niveau: "L3", code: "FS-INFO-RX" },
-      { etablissement: "Faculté des Sciences", mention: "Mathématiques", parcours: "Maths Pures", niveau: "M1", code: "FS-MATH-MP" },
-      { etablissement: "Faculté des Lettres", mention: "Lettres Modernes", parcours: "Littérature", niveau: "L2", code: "FL-LM-LIT" },
-      { etablissement: "École Polytechnique", mention: "Génie Civil", parcours: "Bâtiment", niveau: "M2", code: "EP-GC-BAT" },
-      { etablissement: "ENS", mention: "Sciences Physiques", parcours: "Physique", niveau: "L3", code: "ENS-SP-PH" },
-      { etablissement: "IHSM", mention: "Sciences de la Mer", parcours: "Halieutique", niveau: "M1", code: "IHSM-SM-HA" },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Sciences et Technologies",
+        mention: "Informatique",
+        parcours: "Génie Logiciel",
+        niveau: "L3",
+        code: "UT-ST-INFO-GL",
+      },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Sciences et Technologies",
+        mention: "Informatique",
+        parcours: "Réseaux et Systèmes",
+        niveau: "L3",
+        code: "UT-ST-INFO-RS",
+      },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Sciences et Technologies",
+        mention: "Mathématiques",
+        parcours: "Mathématiques Appliquées",
+        niveau: "M1",
+        code: "UT-ST-MATH-MA",
+      },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Lettres et Sciences Humaines",
+        mention: "Lettres Modernes",
+        parcours: "Littérature Malgache",
+        niveau: "L2",
+        code: "UT-LSH-LM-LIT",
+      },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Sciences et Technologies",
+        mention: "Génie Civil",
+        parcours: "Bâtiment et Travaux Publics",
+        niveau: "M2",
+        code: "UT-ST-GC-BTP",
+      },
+      {
+        etablissement: "ENS Toliara",
+        domaine: "Sciences de l'Éducation",
+        mention: "Sciences Physiques",
+        parcours: "Physique-Chimie",
+        niveau: "L3",
+        code: "ENS-SE-SP-PC",
+      },
+      {
+        etablissement: "IHSM",
+        domaine: "Sciences de la Mer",
+        mention: "Oceanographie",
+        parcours: "Halieutique",
+        niveau: "M1",
+        code: "IHSM-SM-OCEAN-HAL",
+      },
+      {
+        etablissement: "Université de Toliara",
+        domaine: "Droit, Economie, Gestion",
+        mention: "Droit Public",
+        parcours: "Droit Public Interne",
+        niveau: "M1",
+        code: "UT-DEG-DPUB",
+      },
     ];
+
     const existingFac = await db.select().from(facultes);
     if (existingFac.length === 0) {
       await db.insert(facultes).values(facultesData);
     }
 
-    return NextResponse.json({ success: true, message: "Base de données initialisée avec succès" });
+    return NextResponse.json({
+      success: true,
+      message: "Base de données initialisée avec succès selon prompt.md",
+      grades: gradeData.length,
+      annees: anneesData.length,
+      facultes: facultesData.length,
+    });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Seed error:", msg);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
