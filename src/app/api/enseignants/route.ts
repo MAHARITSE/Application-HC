@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { enseignants, heures, grades, paiements, facultes } from "@/db/schema";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import {
+  getEnseignants,
+  saveEnseignants,
+  getHeures,
+  getGrades,
+  getPaiements,
+  getFacultes,
+  createEnseignant,
+  updateEnseignant,
+  deleteEnseignant,
+} from "@/db";
 import { toUpperCase, toTitleCase } from "@/lib/formatters";
 
 export async function GET(request: Request) {
@@ -10,56 +18,46 @@ export async function GET(request: Request) {
     const search = searchParams.get("search")?.trim() || "";
     const anneeId = searchParams.get("anneeId");
 
-    // Base query enseignants (nouveau modèle avec nom, prenom séparés)
-    const baseEnseignants = search
-      ? await db
-          .select()
-          .from(enseignants)
-          .where(
-            or(
-              ilike(enseignants.nom, `%${search}%`),
-              ilike(enseignants.prenom, `%${search}%`),
-              ilike(enseignants.cin, `%${search}%`),
-              ilike(enseignants.etablissementPrincipal, `%${search}%`)
-            )
-          )
-          .orderBy(enseignants.nom)
-      : await db.select().from(enseignants).orderBy(enseignants.nom);
+    let baseEnseignants = getEnseignants();
 
-    // Sans anneeId => liste complète de TOUS les enseignants (bouton Enseignants)
+    // Recherche simple côté serveur
+    if (search) {
+      const s = search.toLowerCase();
+      baseEnseignants = baseEnseignants.filter((e) =>
+        (e.nom || "").toLowerCase().includes(s) ||
+        (e.prenom || "").toLowerCase().includes(s) ||
+        (e.cin || "").toLowerCase().includes(s) ||
+        (e.etablissementPrincipal || "").toLowerCase().includes(s)
+      );
+    }
+
+    // Sans anneeId => liste complète de TOUS les enseignants
     if (!anneeId) {
-      const mapped = baseEnseignants.map((e) => ({
-        ...e,
-        nomPrenom: `${e.nom}${e.prenom ? " " + e.prenom : ""}`.trim(),
-      }));
+      const mapped = baseEnseignants
+        .sort((a, b) => (a.nom || "").localeCompare(b.nom || ""))
+        .map((e) => ({
+          ...e,
+          nomPrenom: `${e.nom}${e.prenom ? " " + e.prenom : ""}`.trim(),
+        }));
       return NextResponse.json(mapped);
     }
 
-    // Avec anneeId => agrégation des heures + paiements + grade/statut stockés dans heures
+    // Avec anneeId => agrégation des heures + paiements
     const anneeIdNum = Number(anneeId);
 
-    // Récupère toutes les heures pour l'année avec grades et facultés
-    const heuresData = await db
-      .select({
-        heure: heures,
-        grade: grades,
-        faculte: facultes,
-      })
-      .from(heures)
-      .leftJoin(grades, eq(heures.gradeId, grades.id))
-      .leftJoin(facultes, eq(heures.faculteId, facultes.id))
-      .where(eq(heures.anneeId, anneeIdNum));
+    const allHeures = getHeures().filter((h) => h.anneeId === anneeIdNum);
+    const allGrades = getGrades();
+    const allFacultes = getFacultes();
+    const allPaiements = getPaiements().filter((p) => p.anneeId === anneeIdNum);
 
-    // Paiements groupés
-    const paiementsData = await db
-      .select({
-        enseignantId: paiements.enseignantId,
-        totalAvance: sql<number>`COALESCE(SUM(${paiements.montantAvance}),0)`,
-        totalPaye: sql<number>`COALESCE(SUM(${paiements.montantPaye}),0)`,
-      })
-      .from(paiements)
-      .where(eq(paiements.anneeId, anneeIdNum))
-      .groupBy(paiements.enseignantId);
+    // Paiements groupés par enseignant
+    const paiementsMap = new Map<number, { totalAvance: number; totalPaye: number }>();
+    for (const p of allPaiements) {
+      const cur = paiementsMap.get(p.enseignantId) || { totalAvance: 0, totalPaye: 0 };
+      cur.totalAvance += p.montantAvance || 0;
+      cur.totalPaye += p.montantPaye || 0;
+      paiementsMap.set(p.enseignantId, cur);
+    }
 
     // Grouper heures par enseignant
     const map = new Map<
@@ -70,16 +68,15 @@ export async function GET(request: Request) {
         total_ep: number;
         total_soutenance: number;
         total_recherche: number;
-        dernierGrade: typeof grades.$inferSelect | null;
+        dernierGrade: any;
         dernierStatut: string | null;
         derniereObligation: number;
-        dernierFaculte: typeof facultes.$inferSelect | null;
-        count: number;
+        dernierFaculte: any;
       }
     >();
 
-    for (const row of heuresData) {
-      const eid = row.heure.enseignantId;
+    for (const h of allHeures) {
+      const eid = h.enseignantId;
       const cur = map.get(eid) || {
         total_et: 0,
         total_ed: 0,
@@ -90,36 +87,32 @@ export async function GET(request: Request) {
         dernierStatut: null,
         derniereObligation: 125,
         dernierFaculte: null,
-        count: 0,
       };
-      cur.total_et += row.heure.heuresET || 0;
-      cur.total_ed += row.heure.heuresED || 0;
-      cur.total_ep += row.heure.heuresEP || 0;
-      cur.total_soutenance += row.heure.heuresSoutenance || 0;
-      cur.total_recherche += row.heure.heuresRecherche || 0;
-      // On garde le dernier (plus grand id) comme référence pour grade/statut/obligation
-      // Comme on itère sans tri, on prend si count==0 ou id plus grand; on va simplement écraser avec le dernier rencontré, puis on fera un tri par id desc plus tard si besoin
-      cur.dernierGrade = row.grade || cur.dernierGrade;
-      cur.dernierStatut = row.heure.statut || cur.dernierStatut;
-      cur.derniereObligation = row.heure.obligation ?? cur.derniereObligation;
-      cur.dernierFaculte = (row.faculte as any) || cur.dernierFaculte;
-      cur.count += 1;
+
+      cur.total_et += h.heuresET || 0;
+      cur.total_ed += h.heuresED || 0;
+      cur.total_ep += h.heuresEP || 0;
+      cur.total_soutenance += h.heuresSoutenance || 0;
+      cur.total_recherche += h.heuresRecherche || 0;
+
+      const grade = allGrades.find((g) => g.id === h.gradeId) || cur.dernierGrade;
+      cur.dernierGrade = grade || cur.dernierGrade;
+      cur.dernierStatut = h.statut || cur.dernierStatut;
+      cur.derniereObligation = h.obligation ?? cur.derniereObligation;
+
+      const fac = h.faculteId ? allFacultes.find((f) => f.id === h.faculteId) : null;
+      cur.dernierFaculte = fac || cur.dernierFaculte;
+
       map.set(eid, cur);
     }
 
-    // Construire résultat: ne garder que les enseignants qui ont des heures cette année ?
-    // Selon prompt, Tableau Principal liste les enseignants ayant des HC pour l'année sélectionnée.
-    // On filtre donc baseEnseignants à ceux présents dans map OU si search vide on montre tout ceux avec heures
-    const filteredEnseignants = baseEnseignants.filter((e) => {
-      if (map.has(e.id)) return true;
-      // Si on a une recherche et que l'enseignant n'a pas d'heures mais match la recherche, on ne l'affiche pas dans le tableau principal
-      // (il apparaitra via le bouton Enseignants)
-      return false;
-    });
+    // Filtrer les enseignants qui ont des heures cette année
+    const filteredEnseignants = baseEnseignants.filter((e) => map.has(e.id));
 
     const result = filteredEnseignants.map((e) => {
       const agg = map.get(e.id)!;
-      const paie = paiementsData.find((p) => p.enseignantId === e.id);
+      const paie = paiementsMap.get(e.id);
+
       return {
         id: e.id,
         nom: e.nom,
@@ -152,10 +145,9 @@ export async function GET(request: Request) {
         total_ep: agg.total_ep,
         total_soutenance: agg.total_soutenance,
         total_recherche: agg.total_recherche,
-        total_avance: paie ? Number(paie.totalAvance) : 0,
-        total_paye: paie ? Number(paie.totalPaye) : 0,
+        total_avance: paie ? paie.totalAvance : 0,
+        total_paye: paie ? paie.totalPaye : 0,
         obligation: agg.derniereObligation,
-        // Pour compat ancien front
         obligation_custom: agg.derniereObligation,
         exempte: agg.derniereObligation === 0,
       };
@@ -178,7 +170,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nom obligatoire (MAJUSCULES)" }, { status: 400 });
     }
 
-    // Support ancien format nomPrenom unique: on split
     let nom = "";
     let prenom: string | null = null;
 
@@ -186,15 +177,10 @@ export async function POST(request: Request) {
       nom = toUpperCase(body.nom);
       prenom = body.prenom ? toTitleCase(body.prenom) : null;
     } else if (body.nomPrenom) {
-      // Essaie de séparer premier mot comme nom? Mais spec dit nom et prenom séparés.
-      // On considère tout en majuscules comme nom si pas de prenom fourni
       const parts = body.nomPrenom.trim().split(/\s+/);
       if (parts.length === 1) {
         nom = toUpperCase(parts[0]);
       } else {
-        // Première partie en majuscule = nom, reste = prénom
-        // Heuristique: si tout est en majuscules, garde nom complet en maj et prenom null?
-        // On fait: nom = premier mot majuscule, prenom = reste Title Case
         nom = toUpperCase(parts[0]);
         prenom = toTitleCase(parts.slice(1).join(" "));
       }
@@ -202,27 +188,24 @@ export async function POST(request: Request) {
 
     const adresse = body.adresse ? toTitleCase(body.adresse) : null;
 
-    const [result] = await db
-      .insert(enseignants)
-      .values({
-        nom,
-        prenom,
-        cin: body.cin?.trim() || null,
-        dateCIN: body.dateCIN || body.dateCin || null,
-        dateNaissance: body.dateNaissance || null,
-        lieuNaissance: body.lieuNaissance?.trim() || null,
-        nationalite: body.nationalite?.trim() || "Malagasy",
-        adresse,
-        telephone: body.telephone?.trim() || null,
-        email: body.email?.trim() || null,
-        rib: body.rib?.trim() || null,
-        specialite: body.specialite?.trim() || null,
-        etablissementPrincipal: body.etablissementPrincipal?.trim() || null,
-        dateRecrutement: body.dateRecrutement || null,
-      })
-      .returning();
+    const newEns = createEnseignant({
+      nom,
+      prenom,
+      cin: body.cin?.trim() || null,
+      dateCIN: body.dateCIN || body.dateCin || null,
+      dateNaissance: body.dateNaissance || null,
+      lieuNaissance: body.lieuNaissance?.trim() || null,
+      nationalite: body.nationalite?.trim() || "Malagasy",
+      adresse,
+      telephone: body.telephone?.trim() || null,
+      email: body.email?.trim() || null,
+      rib: body.rib?.trim() || null,
+      specialite: body.specialite?.trim() || null,
+      etablissementPrincipal: body.etablissementPrincipal?.trim() || null,
+      dateRecrutement: body.dateRecrutement || null,
+    });
 
-    return NextResponse.json(result);
+    return NextResponse.json(newEns);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

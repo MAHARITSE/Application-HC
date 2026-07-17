@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { enseignants, heures, grades, facultes, annees, paiements } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  getAnnees,
+  getHeures,
+  getEnseignants,
+  getGrades,
+  getFacultes,
+  getPaiements,
+} from "@/db";
 import { calcHC, calcHCNette, calcMontantBrut, calcIRSA } from "@/lib/metier";
 
 export async function GET(req: NextRequest) {
@@ -11,27 +16,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "anneeId requis" }, { status: 400 });
   }
 
-  const [annee] = await db.select().from(annees).where(eq(annees.id, anneeId));
-  const heuresData = await db
-    .select({
-      heure: heures,
-      enseignant: enseignants,
-      grade: grades,
-      faculte: facultes,
-    })
-    .from(heures)
-    .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
-    .leftJoin(grades, eq(heures.gradeId, grades.id))
-    .leftJoin(facultes, eq(heures.faculteId, facultes.id))
-    .where(eq(heures.anneeId, anneeId));
+  const annees = getAnnees();
+  const annee = annees.find((a) => a.id === anneeId);
 
-  const paiementsData = await db.select().from(paiements).where(eq(paiements.anneeId, anneeId));
+  const heuresData = getHeures()
+    .filter((h) => h.anneeId === anneeId)
+    .map((h) => ({
+      heure: h,
+      enseignant: getEnseignants().find((e) => e.id === h.enseignantId),
+      grade: h.gradeId ? getGrades().find((g) => g.id === h.gradeId) : null,
+      faculte: h.faculteId ? getFacultes().find((f) => f.id === h.faculteId) : null,
+    }))
+    .filter((row) => row.enseignant); // only valid
+
+  const paiementsData = getPaiements().filter((p) => p.anneeId === anneeId);
 
   // Aggregation par enseignant
   const map = new Map<number, any>();
 
   for (const row of heuresData) {
-    const eid = row.enseignant.id;
+    const eid = row.enseignant!.id;
     if (!map.has(eid)) {
       map.set(eid, {
         enseignant: row.enseignant,
@@ -69,7 +73,9 @@ export async function GET(req: NextRequest) {
     }
     const irsa = calcIRSA(montantBrut, annee?.tauxIRSA || 20, annee?.appliquerIRSA ?? true);
     const montantNet = montantBrut - irsa;
-    const totalAvance = paiementsData.filter((p) => p.enseignantId === entry.enseignant.id).reduce((s, p) => s + (p.montantAvance || 0), 0);
+    const totalAvance = paiementsData
+      .filter((p) => p.enseignantId === entry.enseignant.id)
+      .reduce((s, p) => s + (p.montantAvance || 0), 0);
 
     return {
       numero: idx + 1,

@@ -1,44 +1,57 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+// ═══════════════════════════════════════════════════════════════════════════════
+// JSON-ONLY DATABASE (remplace PostgreSQL + Drizzle)
+// Utilise src/db/jsonStore.ts
+// ═══════════════════════════════════════════════════════════════════════════════
 
-const databaseUrl = process.env.DATABASE_URL;
+import * as jsonStore from "./jsonStore";
 
-// Pendant le build (sans DATABASE_URL), on évite de crasher.
-// Les routes API doivent avoir DATABASE_URL à l'exécution.
-const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
-  __arenaDrizzleDb?: ReturnType<typeof drizzle>;
+// Re-export tout pour compatibilité
+export const {
+  getAnnees,
+  saveAnnees,
+  getGrades,
+  saveGrades,
+  getFacultes,
+  saveFacultes,
+  getEnseignants,
+  saveEnseignants,
+  getHeures,
+  saveHeures,
+  getPaiements,
+  savePaiements,
+
+  createAnnee,
+  updateAnnee,
+  deleteAnnee,
+  createGrade,
+  updateGrade,
+  createFaculte,
+  deleteFaculte,
+  createEnseignant,
+  updateEnseignant,
+  deleteEnseignant,
+  createHeure,
+  updateHeure,
+  deleteHeure,
+  createPaiement,
+  deletePaiement,
+
+  seedIfEmpty,
+} = jsonStore;
+
+// Types
+export type { Annee, Grade, Faculte, Enseignant, Heure, Paiement } from "./jsonStore";
+
+// Pour compatibilité avec l'ancien code qui fait `import { db } from "@/db"`
+// On fournit un stub qui redirige vers jsonStore (on ne l'utilise plus directement)
+export const db = {
+  // Placeholder pour éviter les crashes pendant la migration complète
+  // Les routes API doivent maintenant utiliser directement les helpers du jsonStore
+  _jsonOnly: true,
+  _message: "PostgreSQL supprimé. Utilisation de JSON uniquement via jsonStore.",
 };
 
-let pool: Pool;
-let dbInstance: ReturnType<typeof drizzle>;
+// On garde aussi pool pour éviter les erreurs d'import
+export const pool = null as any;
 
-if (!databaseUrl) {
-  // Mock pool minimal pour permettre le build
-  if (process.env.NODE_ENV === "production") {
-    console.warn("DATABASE_URL not set – using dummy DB for build");
-  }
-  pool = new Pool({
-    connectionString: "postgres://user:pass@localhost:5432/dummy",
-  });
-  // Empêcher les connexions réelles pendant le build
-  pool.connect = (() => {
-    throw new Error("DATABASE_URL is required at runtime");
-  }) as any;
-  dbInstance = drizzle(pool);
-} else {
-  pool = globalForDb.__arenaNextJsPostgresqlPool ??
-    new Pool({
-      connectionString: databaseUrl,
-    });
-  if (process.env.NODE_ENV !== "production") {
-    globalForDb.__arenaNextJsPostgresqlPool = pool;
-  }
-  dbInstance = globalForDb.__arenaDrizzleDb ?? drizzle(pool);
-  if (process.env.NODE_ENV !== "production") {
-    globalForDb.__arenaDrizzleDb = dbInstance;
-  }
-}
-
-export const db = dbInstance;
-export { pool };
+console.log("✅ Application en mode JSON-only (data/*.json) - PostgreSQL désactivé");
