@@ -2,54 +2,130 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Modal from "@/components/Modal";
 import { GradeBadge, StatutBadge } from "@/components/Badge";
+import EnseignantForm from "@/components/EnseignantForm";
 import {
-  Search, Plus, FileText, Settings,
-  Trash2, Edit, BarChart3, X,
-  RefreshCw, Users, GraduationCap, Building2,
-  Calendar, DollarSign, Clock, CheckCircle2, AlertCircle,
-  CreditCard, Wallet, ChevronDown,
+  Search,
+  Plus,
+  FileText,
+  Settings,
+  Trash2,
+  Edit,
+  BarChart3,
+  X,
+  RefreshCw,
+  Users,
+  GraduationCap,
+  Building2,
+  Calendar,
+  DollarSign,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  CreditCard,
+  Wallet,
 } from "lucide-react";
 import { calcHC, calcHCNette, calcMontantBrut, calcIRSA, formatAriary } from "@/lib/metier";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Annee {
-  id: number; libelle: string; tranche: string; active: boolean;
-  appliquerIRSA: boolean; tauxIRSA: number; plafondPaiement: string | null;
+  id: number;
+  libelle: string;
+  tranche: string;
+  active: boolean;
+  appliquerIRSA: boolean;
+  tauxIRSA: number;
+  plafondPaiement: string | null;
 }
 interface Grade {
-  id: number; code: string; libelle: string;
-  tauxHoraire: number; obligationService: number;
+  id: number;
+  code: string;
+  libelle: string;
+  tauxHoraire: number;
 }
 interface Faculte {
-  id: number; etablissement: string;
-  mention: string | null; parcours: string | null; niveau: string | null; code: string | null;
+  id: number;
+  etablissement: string;
+  domaine: string;
+  mention: string;
+  parcours: string | null;
+  niveau: string | null;
+  code: string | null;
 }
-interface Enseignant {
-  id: number; nomPrenom: string; cin: string | null; statut: string;
-  gradeCode: string | null; gradeTaux: number | null; gradeObligation: number | null;
-  etablissementPrincipal: string | null; rib: string | null; specialite: string | null;
-  telephone: string | null; email: string | null; gradeId: number | null;
-  total_et: number; total_ed: number; total_ep: number;
-  total_soutenance: number; total_recherche: number; total_avance: number;
-  obligation_custom: number | null; exempte: boolean;
+interface EnseignantRow {
+  id: number;
+  nom: string;
+  prenom: string | null;
+  nomPrenom: string;
+  cin: string | null;
+  dateCIN?: string | null;
+  statut: string;
+  gradeCode: string | null;
+  gradeLibelle?: string | null;
+  gradeTaux: number | null;
+  gradeId?: number | null;
+  etablissementPrincipal: string | null;
+  faculteEtablissement?: string | null;
+  faculteDomaine?: string | null;
+  faculteMention?: string | null;
+  rib: string | null;
+  telephone: string | null;
+  email: string | null;
+  specialite: string | null;
+  adresse?: string | null;
+  total_et: number;
+  total_ed: number;
+  total_ep: number;
+  total_soutenance: number;
+  total_recherche: number;
+  total_avance: number;
+  obligation: number;
+  obligation_custom?: number | null;
+  exempte?: boolean;
 }
 interface EnseignantBase {
-  id: number; nomPrenom: string; cin: string | null; statut: string;
-  gradeId: number | null; gradeCode: string | null; gradeTaux: number | null;
-  gradeObligation: number | null; etablissementPrincipal: string | null;
-  rib: string | null; specialite: string | null; telephone: string | null; email: string | null;
+  id: number;
+  nom: string;
+  prenom: string | null;
+  nomPrenom: string;
+  cin: string | null;
+  telephone: string | null;
+  email: string | null;
+  rib: string | null;
+  etablissementPrincipal: string | null;
+  specialite: string | null;
+  adresse?: string | null;
+  nationalite?: string | null;
+  dateNaissance?: string | null;
+  lieuNaissance?: string | null;
+  dateRecrutement?: string | null;
+  dateCIN?: string | null;
+}
+
+interface HeureDetail {
+  id: number;
+  enseignantId: number;
+  anneeId: number;
+  faculteId: number | null;
+  gradeId: number | null;
+  statut: string;
+  heuresET: number;
+  heuresED: number;
+  heuresEP: number;
+  heuresSoutenance: number;
+  heuresRecherche: number;
+  obligation: number;
+  faculte: Faculte | null;
+  grade: Grade | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PAGE PRINCIPALE
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function HomePage() {
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── State principaux ────────────────────────────────────────────────────────
   const [annees, setAnnees] = useState<Annee[]>([]);
   const [selectedAnnee, setSelectedAnnee] = useState<Annee | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [facultes, setFacultes] = useState<Faculte[]>([]);
-  const [enseignants, setEnseignants] = useState<Enseignant[]>([]);
+  const [enseignants, setEnseignants] = useState<EnseignantRow[]>([]);
   const [allEnseignants, setAllEnseignants] = useState<EnseignantBase[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatut, setFilterStatut] = useState("Tous");
@@ -66,43 +142,68 @@ export default function HomePage() {
   const [showGradeModal, setShowGradeModal] = useState(false);
   const [showPaiementModal, setShowPaiementModal] = useState(false);
   const [showAddHeuresModal, setShowAddHeuresModal] = useState(false);
+  const [showAllEnsModal, setShowAllEnsModal] = useState(false);
 
-  const [editEns, setEditEns] = useState<Partial<Enseignant> | null>(null);
-  const [selectedEns, setSelectedEns] = useState<Enseignant | null>(null);
+  const [editEns, setEditEns] = useState<EnseignantBase | null>(null);
+  const [selectedEns, setSelectedEns] = useState<EnseignantRow | null>(null);
   const [ficheData, setFicheData] = useState<Record<string, unknown> | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [allEnsSearch, setAllEnsSearch] = useState("");
 
-  // Enseignant search for heures
+  // Recherche enseignant pour heures (autocomplete)
   const [ensSearchQuery, setEnsSearchQuery] = useState("");
   const [ensSearchResults, setEnsSearchResults] = useState<EnseignantBase[]>([]);
   const [selectedEnsForHeures, setSelectedEnsForHeures] = useState<EnseignantBase | null>(null);
-  const [showEnsDropdown, setShowEnsDropdown] = useState(false);
 
-  // Form states
-  const [ensForm, setEnsForm] = useState({
-    nomPrenom: "", cin: "", dateNaissance: "", lieuNaissance: "",
-    nationalite: "Malagasy", adresse: "", telephone: "", email: "",
-    rib: "", banque: "", statut: "Permanent", specialite: "",
-    gradeId: "", etablissementPrincipal: "", dateRecrutement: "",
+  // Formulaire saisie HC (étape 2) - conforme prompt.md: grade et statut stockés dans heures
+  const [heuresHCForm, setHeuresHCForm] = useState({
+    gradeId: "",
+    statut: "Vacataire" as "Permanent" | "Vacataire",
+    faculteId: "",
+    heuresET: 0,
+    heuresED: 0,
+    heuresEP: 0,
+    heuresSoutenance: 0,
+    heuresRecherche: 0,
+    obligation: 125,
   });
 
+  // Heures detail list
+  const [heuresList, setHeuresList] = useState<HeureDetail[]>([]);
   const [heuresForm, setHeuresForm] = useState({
-    faculteId: "", heuresET: 0, heuresED: 0, heuresEP: 0,
-    heuresSoutenance: 0, heuresRecherche: 0,
+    faculteId: "",
+    gradeId: "",
+    statut: "Vacataire" as "Permanent" | "Vacataire",
+    heuresET: 0,
+    heuresED: 0,
+    heuresEP: 0,
+    heuresSoutenance: 0,
+    heuresRecherche: 0,
+    obligation: 125,
   });
-  const [heuresList, setHeuresList] = useState<{
-    id: number; faculteId: number | null; heuresET: number; heuresED: number;
-    heuresEP: number; heuresSoutenance: number; heuresRecherche: number;
-    faculte: Faculte | null;
-  }[]>([]);
+  const [editingHeureId, setEditingHeureId] = useState<number | null>(null);
 
-  const [facForm, setFacForm] = useState({ etablissement: "", mention: "", parcours: "", niveau: "", code: "" });
+  // Faculté form selon prompt.md: Etab*, Domaine*, Mention*, Parcours, Niveau
+  const [facForm, setFacForm] = useState({
+    etablissement: "",
+    domaine: "",
+    mention: "",
+    parcours: "",
+    niveau: "",
+    code: "",
+  });
+  const [facSuggestions, setFacSuggestions] = useState<Record<string, string[]>>({});
+  const [facError, setFacError] = useState("");
+
   const [anneeForm, setAnneeForm] = useState({
-    libelle: "", tranche: "Première tranche", active: false,
-    appliquerIRSA: true, tauxIRSA: 20, plafondPaiement: "",
+    libelle: "",
+    tranche: "Première tranche",
+    active: false,
+    appliquerIRSA: true,
+    tauxIRSA: 20,
+    plafondPaiement: "",
   });
 
-  // Paiement form
   const [paiementForm, setPaiementForm] = useState({
     pourcentageTranche: 100,
     montantAvance: 0,
@@ -111,7 +212,30 @@ export default function HomePage() {
     reference: "",
   });
 
-  // ── Initialisation ────────────────────────────────────────────────────────
+  const [returnToHeuresAfterCreate, setReturnToHeuresAfterCreate] = useState(false);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  const fetchDistinct = useCallback(async (field: string, q: string) => {
+    if (!q || q.length < 1) return [];
+    try {
+      const res = await fetch(`/api/facultes?field=${field}&distinct=true&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const handleFacFieldChange = async (field: keyof typeof facForm, value: string) => {
+    setFacForm((f) => ({ ...f, [field]: value }));
+    // Autocomplete
+    if (["etablissement", "domaine", "mention", "parcours", "niveau"].includes(field) && value.length >= 1) {
+      const sugg = await fetchDistinct(field, value);
+      setFacSuggestions((s) => ({ ...s, [field]: sugg }));
+    }
+  };
+
+  // ── Initialisation ──────────────────────────────────────────────────────────
   const initSeed = useCallback(async () => {
     if (seeded) return;
     await fetch("/api/seed", { method: "POST" });
@@ -121,10 +245,12 @@ export default function HomePage() {
   const loadAnnees = useCallback(async () => {
     const res = await fetch("/api/annees");
     const data: Annee[] = await res.json();
-    setAnnees(data);
-    // Sélectionner la dernière année (première dans la liste triée desc)
-    if (!selectedAnnee && data.length > 0) {
-      setSelectedAnnee(data[0]); // Dernière année en premier
+    // Tri desc par libelle déjà, mais on s'assure que la dernière année est en premier
+    const sorted = [...data].sort((a, b) => b.libelle.localeCompare(a.libelle));
+    setAnnees(sorted);
+    if (!selectedAnnee && sorted.length > 0) {
+      // Se place sur la DERNIÈRE année au lancement selon prompt.md
+      setSelectedAnnee(sorted[0]);
     }
   }, [selectedAnnee]);
 
@@ -140,7 +266,8 @@ export default function HomePage() {
 
   const loadAllEnseignants = useCallback(async () => {
     const res = await fetch("/api/enseignants");
-    setAllEnseignants(await res.json());
+    const data = await res.json();
+    setAllEnseignants(data);
   }, []);
 
   const loadEnseignants = useCallback(async () => {
@@ -150,8 +277,13 @@ export default function HomePage() {
       search,
       anneeId: String(selectedAnnee.id),
     });
-    const res = await fetch(`/api/enseignants?${params}`);
-    setEnseignants(await res.json());
+    try {
+      const res = await fetch(`/api/enseignants?${params}`);
+      const data = await res.json();
+      setEnseignants(Array.isArray(data) ? data : []);
+    } catch {
+      setEnseignants([]);
+    }
     setLoading(false);
   }, [selectedAnnee, search]);
 
@@ -164,136 +296,137 @@ export default function HomePage() {
     });
   }, [initSeed, loadAnnees, loadGrades, loadFacultes, loadAllEnseignants]);
 
-  useEffect(() => { loadEnseignants(); }, [loadEnseignants]);
+  useEffect(() => {
+    loadEnseignants();
+  }, [loadEnseignants]);
 
-  // Search enseignants for autocomplete
+  // Autocomplete enseignants
   useEffect(() => {
     if (ensSearchQuery.length >= 2) {
-      const results = allEnseignants.filter(e =>
-        e.nomPrenom.toLowerCase().includes(ensSearchQuery.toLowerCase())
-      );
-      setEnsSearchResults(results);
-      setShowEnsDropdown(true);
+      const results = allEnseignants.filter((e) => e.nomPrenom.toLowerCase().includes(ensSearchQuery.toLowerCase()));
+      setEnsSearchResults(results.slice(0, 20));
     } else {
       setEnsSearchResults([]);
-      setShowEnsDropdown(false);
     }
   }, [ensSearchQuery, allEnseignants]);
 
-  // ── Calcul d'une ligne ──────────────────────────────────────────────────────
-  const calcRow = useCallback((e: Enseignant) => {
-    const hc = calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche);
-    const obligation = e.exempte ? 0 : (e.obligation_custom ?? e.gradeObligation ?? 0);
-    const { hcNette } = calcHCNette(hc, obligation, e.statut);
-    const hcArr = Math.floor(hcNette);
-    const taux = e.gradeTaux || 0;
-    const montant = calcMontantBrut(hcArr, taux);
+  // ── Calcul d'une ligne tableau principal ────────────────────────────────────
+  const calcRow = useCallback(
+    (e: EnseignantRow) => {
+      const hcBrut = calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche);
+      const obligation = e.obligation ?? (e.statut === "Permanent" ? 125 : 0);
+      const { hcNette } = calcHCNette(hcBrut, obligation, e.statut);
+      const hcArr = Math.floor(hcNette);
+      const taux = e.gradeTaux || 0;
+      let montantBrut = calcMontantBrut(hcArr, taux);
+      if (selectedAnnee?.plafondPaiement && montantBrut > Number(selectedAnnee.plafondPaiement)) {
+        montantBrut = Number(selectedAnnee.plafondPaiement);
+      }
+      const irsa = calcIRSA(montantBrut, selectedAnnee?.tauxIRSA || 20, selectedAnnee?.appliquerIRSA ?? true);
+      const montantNet = montantBrut - irsa;
+      const net = montantNet - (e.total_avance || 0);
 
-    let montantFinal = montant;
-    if (selectedAnnee?.plafondPaiement && montant > Number(selectedAnnee.plafondPaiement)) {
-      montantFinal = Number(selectedAnnee.plafondPaiement);
-    }
+      return {
+        hcBrut,
+        obligation,
+        hcNette,
+        hcArr,
+        taux,
+        montantBrut,
+        irsa,
+        montantNet,
+        net,
+      };
+    },
+    [selectedAnnee]
+  );
 
-    const irsa = calcIRSA(montantFinal, selectedAnnee?.tauxIRSA || 20, selectedAnnee?.appliquerIRSA ?? true);
-    const montantNet = montantFinal - irsa;
-    const net = montantNet - (e.total_avance || 0);
-
-    return { hc, obligation, hcNette, hcArr, taux, montantBrut: montantFinal, irsa, montantNet, net };
-  }, [selectedAnnee]);
-
-  // ── Filtrage ──────────────────────────────────────────────────────────────
+  // ── Filtrage tableau ────────────────────────────────────────────────────────
   const filtered = enseignants.filter((e) => {
     if (filterStatut !== "Tous" && e.statut !== filterStatut) return false;
     if (filterGrade !== "Tous" && e.gradeCode !== filterGrade) return false;
     return true;
   });
 
-  // ── Statistiques ─────────────────────────────────────────────────────────
-  const stats = useMemo(() => ({
-    total: filtered.length,
-    perm: filtered.filter((e) => e.statut === "Permanent").length,
-    vacat: filtered.filter((e) => e.statut === "Vacataire").length,
-    totalHeures: filtered.reduce((sum, e) => sum + calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche), 0),
-    montant: filtered.reduce((sum, e) => sum + calcRow(e).net, 0),
-  }), [filtered, calcRow]);
+  const filteredAllEns = allEnseignants.filter((e) => {
+    if (!allEnsSearch) return true;
+    return e.nomPrenom.toLowerCase().includes(allEnsSearch.toLowerCase());
+  });
 
-  // ── Handlers Enseignant ───────────────────────────────────────────────────
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  const stats = useMemo(
+    () => ({
+      total: filtered.length,
+      perm: filtered.filter((e) => e.statut === "Permanent").length,
+      vacat: filtered.filter((e) => e.statut === "Vacataire").length,
+      totalHeures: filtered.reduce((sum, e) => sum + calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche), 0),
+      montant: filtered.reduce((sum, e) => sum + calcRow(e).net, 0),
+    }),
+    [filtered, calcRow]
+  );
+
+  // ── Handlers Enseignant Base (sans grade/statut) ───────────────────────────
   const handleAddEns = () => {
     setEditEns(null);
-    setEnsForm({
-      nomPrenom: "", cin: "", dateNaissance: "", lieuNaissance: "",
-      nationalite: "Malagasy", adresse: "", telephone: "", email: "",
-      rib: "", banque: "", statut: "Permanent", specialite: "",
-      gradeId: "", etablissementPrincipal: "", dateRecrutement: "",
+    setShowEnsModal(true);
+  };
+
+  const handleEditEns = (ens: EnseignantBase | EnseignantRow) => {
+    setEditEns({
+      id: ens.id,
+      nom: (ens as any).nom || ens.nomPrenom.split(" ")[0],
+      prenom: (ens as any).prenom || ens.nomPrenom.split(" ").slice(1).join(" ") || "",
+      nomPrenom: ens.nomPrenom,
+      cin: (ens as any).cin || null,
+      telephone: (ens as any).telephone || null,
+      email: (ens as any).email || null,
+      rib: (ens as any).rib || null,
+      etablissementPrincipal: (ens as any).etablissementPrincipal || null,
+      specialite: (ens as any).specialite || null,
+      adresse: (ens as any).adresse || null,
+      nationalite: (ens as any).nationalite || "Malagasy",
     });
     setShowEnsModal(true);
   };
 
-  const handleEditEns = (e: Enseignant) => {
-    setEditEns(e);
-    setEnsForm({
-      nomPrenom: e.nomPrenom,
-      cin: e.cin || "",
-      dateNaissance: "",
-      lieuNaissance: "",
-      nationalite: "Malagasy",
-      adresse: "",
-      telephone: e.telephone || "",
-      email: e.email || "",
-      rib: e.rib || "",
-      banque: "",
-      statut: e.statut,
-      specialite: e.specialite || "",
-      gradeId: String(e.gradeId || ""),
-      etablissementPrincipal: e.etablissementPrincipal || "",
-      dateRecrutement: "",
-    });
-    setShowEnsModal(true);
-  };
-
-  const [returnToHeuresAfterCreate, setReturnToHeuresAfterCreate] = useState(false);
-
-  const handleSaveEns = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEns = async (data: any) => {
     setFormLoading(true);
     try {
-      let newEnseignant = null;
+      let newEnseignant: any = null;
       if (editEns?.id) {
-        await fetch(`/api/enseignants/${editEns.id}`, {
+        const res = await fetch(`/api/enseignants/${editEns.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ensForm),
+          body: JSON.stringify(data),
         });
+        newEnseignant = await res.json();
       } else {
         const res = await fetch("/api/enseignants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ensForm),
+          body: JSON.stringify(data),
         });
         newEnseignant = await res.json();
       }
       setShowEnsModal(false);
       await loadEnseignants();
       await loadAllEnseignants();
-      
-      // Si on vient de la saisie heures, retourner et sélectionner le nouvel enseignant
+
       if (returnToHeuresAfterCreate && newEnseignant) {
-        setSelectedEnsForHeures({
+        const mapped: EnseignantBase = {
           id: newEnseignant.id,
-          nomPrenom: newEnseignant.nomPrenom,
+          nom: newEnseignant.nom,
+          prenom: newEnseignant.prenom,
+          nomPrenom: `${newEnseignant.nom} ${newEnseignant.prenom || ""}`.trim(),
           cin: newEnseignant.cin,
-          statut: newEnseignant.statut,
-          gradeId: newEnseignant.gradeId,
-          gradeCode: null,
-          gradeTaux: null,
-          gradeObligation: null,
-          etablissementPrincipal: newEnseignant.etablissementPrincipal,
-          rib: newEnseignant.rib,
-          specialite: newEnseignant.specialite,
           telephone: newEnseignant.telephone,
           email: newEnseignant.email,
-        });
-        setEnsSearchQuery(newEnseignant.nomPrenom);
+          rib: newEnseignant.rib,
+          etablissementPrincipal: newEnseignant.etablissementPrincipal,
+          specialite: newEnseignant.specialite,
+        };
+        setSelectedEnsForHeures(mapped);
+        setEnsSearchQuery(mapped.nomPrenom);
         setShowAddHeuresModal(true);
         setReturnToHeuresAfterCreate(false);
       }
@@ -309,138 +442,200 @@ export default function HomePage() {
     await loadAllEnseignants();
   };
 
-  // ── Heures (with autocomplete) ─────────────────────────────────────────────
+  // ── Saisir Heures (2 étapes) ────────────────────────────────────────────────
   const handleOpenAddHeures = () => {
     setSelectedEnsForHeures(null);
     setEnsSearchQuery("");
-    setHeuresForm({ faculteId: "", heuresET: 0, heuresED: 0, heuresEP: 0, heuresSoutenance: 0, heuresRecherche: 0 });
+    setEnsSearchResults([]);
+    setHeuresHCForm({
+      gradeId: "",
+      statut: "Vacataire",
+      faculteId: "",
+      heuresET: 0,
+      heuresED: 0,
+      heuresEP: 0,
+      heuresSoutenance: 0,
+      heuresRecherche: 0,
+      obligation: 0, // vacataire défaut 0
+    });
     setShowAddHeuresModal(true);
   };
 
   const handleSelectEnsForHeures = (ens: EnseignantBase) => {
     setSelectedEnsForHeures(ens);
     setEnsSearchQuery(ens.nomPrenom);
-    setShowEnsDropdown(false);
+    setEnsSearchResults([]);
   };
 
-  const handleCreateAndSelectEns = async () => {
-    // Create new enseignant with minimal info
-    const res = await fetch("/api/enseignants", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nomPrenom: ensSearchQuery, statut: "Vacataire" }),
-    });
-    const newEns = await res.json();
-    await loadAllEnseignants();
-    setSelectedEnsForHeures({
-      id: newEns.id,
-      nomPrenom: newEns.nomPrenom,
-      cin: null,
-      statut: newEns.statut,
-      gradeId: null,
-      gradeCode: null,
-      gradeTaux: null,
-      gradeObligation: null,
-      etablissementPrincipal: null,
-      rib: null,
-      specialite: null,
-      telephone: null,
-      email: null,
-    });
-    setShowEnsDropdown(false);
+  const handleStatutChange = (statut: "Permanent" | "Vacataire") => {
+    setHeuresHCForm((f) => ({
+      ...f,
+      statut,
+      obligation: statut === "Vacataire" ? 0 : f.obligation === 0 ? 125 : f.obligation,
+    }));
   };
 
-  // Ouvrir le formulaire complet pour créer un enseignant depuis la saisie heures
   const handleOpenCreateEnseignant = () => {
     setEditEns(null);
-    setEnsForm({
-      nomPrenom: ensSearchQuery, // Pré-remplir avec la recherche
-      cin: "", dateNaissance: "", lieuNaissance: "",
-      nationalite: "Malagasy", adresse: "", telephone: "", email: "",
-      rib: "", banque: "", statut: "Vacataire", specialite: "",
-      gradeId: "", etablissementPrincipal: "", dateRecrutement: "",
-    });
-    setReturnToHeuresAfterCreate(true); // Marquer pour retour après création
-    setShowAddHeuresModal(false); // Fermer la modal heures
-    setShowEnsModal(true); // Ouvrir la modal enseignant
+    setReturnToHeuresAfterCreate(true);
+    setShowAddHeuresModal(false);
+    setShowEnsModal(true);
   };
 
   const handleAddHeuresForSelected = async () => {
     if (!selectedEnsForHeures || !selectedAnnee) return;
-    await fetch("/api/heures", {
+    if (!heuresHCForm.gradeId) {
+      alert("Grade obligatoire (stocké avec les heures pour garder l'historique)");
+      return;
+    }
+    const payload = {
+      enseignantId: selectedEnsForHeures.id,
+      anneeId: selectedAnnee.id,
+      gradeId: Number(heuresHCForm.gradeId),
+      statut: heuresHCForm.statut,
+      faculteId: heuresHCForm.faculteId ? Number(heuresHCForm.faculteId) : null,
+      heuresET: heuresHCForm.heuresET,
+      heuresED: heuresHCForm.heuresED,
+      heuresEP: heuresHCForm.heuresEP,
+      heuresSoutenance: heuresHCForm.heuresSoutenance,
+      heuresRecherche: heuresHCForm.heuresRecherche,
+      obligation: heuresHCForm.obligation,
+    };
+    const res = await fetch("/api/heures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        enseignantId: selectedEnsForHeures.id,
-        anneeId: selectedAnnee.id,
-        ...heuresForm,
-      }),
+      body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Erreur");
+      return;
+    }
     setShowAddHeuresModal(false);
     await loadEnseignants();
   };
 
-  const handleOpenHeures = async (e: Enseignant) => {
+  // ── Gestion Heures existantes (modal détail) ────────────────────────────────
+  const handleOpenHeures = async (e: EnseignantRow) => {
     setSelectedEns(e);
-    setHeuresForm({ faculteId: "", heuresET: 0, heuresED: 0, heuresEP: 0, heuresSoutenance: 0, heuresRecherche: 0 });
+    setEditingHeureId(null);
+    setHeuresForm({
+      faculteId: "",
+      gradeId: e.gradeId ? String(e.gradeId) : grades[0]?.id ? String(grades[0].id) : "",
+      statut: (e.statut as any) || "Vacataire",
+      heuresET: 0,
+      heuresED: 0,
+      heuresEP: 0,
+      heuresSoutenance: 0,
+      heuresRecherche: 0,
+      obligation: e.obligation ?? (e.statut === "Permanent" ? 125 : 0),
+    });
     if (selectedAnnee) {
       const res = await fetch(`/api/heures?enseignantId=${e.id}&anneeId=${selectedAnnee.id}`);
-      const data = await res.json();
-      setHeuresList(data.map((d: { heures: Record<string, unknown>; faculte: Faculte | null }) => ({
-        id: d.heures.id,
-        faculteId: d.heures.faculteId,
-        heuresET: d.heures.heuresET || 0,
-        heuresED: d.heures.heuresED || 0,
-        heuresEP: d.heures.heuresEP || 0,
-        heuresSoutenance: d.heures.heuresSoutenance || 0,
-        heuresRecherche: d.heures.heuresRecherche || 0,
-        faculte: d.faculte,
-      })));
+      const data: HeureDetail[] = await res.json();
+      setHeuresList(data);
     }
     setShowHeuresModal(true);
   };
 
-  const handleAddHeures = async () => {
-    if (!selectedEns || !selectedAnnee) return;
-    await fetch("/api/heures", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        enseignantId: selectedEns.id,
-        anneeId: selectedAnnee.id,
-        ...heuresForm,
-      }),
+  const handleEditHeure = (h: HeureDetail) => {
+    setEditingHeureId(h.id);
+    setHeuresForm({
+      faculteId: h.faculteId ? String(h.faculteId) : "",
+      gradeId: h.gradeId ? String(h.gradeId) : "",
+      statut: h.statut as any,
+      heuresET: h.heuresET,
+      heuresED: h.heuresED,
+      heuresEP: h.heuresEP,
+      heuresSoutenance: h.heuresSoutenance,
+      heuresRecherche: h.heuresRecherche,
+      obligation: h.obligation,
     });
-    handleOpenHeures(selectedEns);
+  };
+
+  const handleSaveHeureEdit = async () => {
+    if (!editingHeureId) {
+      // Ajout nouvelle ligne
+      if (!selectedEns || !selectedAnnee) return;
+      if (!heuresForm.gradeId) {
+        alert("Grade obligatoire");
+        return;
+      }
+      await fetch("/api/heures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enseignantId: selectedEns.id,
+          anneeId: selectedAnnee.id,
+          faculteId: heuresForm.faculteId ? Number(heuresForm.faculteId) : null,
+          gradeId: Number(heuresForm.gradeId),
+          statut: heuresForm.statut,
+          heuresET: heuresForm.heuresET,
+          heuresED: heuresForm.heuresED,
+          heuresEP: heuresForm.heuresEP,
+          heuresSoutenance: heuresForm.heuresSoutenance,
+          heuresRecherche: heuresForm.heuresRecherche,
+          obligation: heuresForm.obligation,
+        }),
+      });
+    } else {
+      await fetch(`/api/heures/${editingHeureId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          faculteId: heuresForm.faculteId ? Number(heuresForm.faculteId) : null,
+          gradeId: Number(heuresForm.gradeId),
+          statut: heuresForm.statut,
+          heuresET: heuresForm.heuresET,
+          heuresED: heuresForm.heuresED,
+          heuresEP: heuresForm.heuresEP,
+          heuresSoutenance: heuresForm.heuresSoutenance,
+          heuresRecherche: heuresForm.heuresRecherche,
+          obligation: heuresForm.obligation,
+        }),
+      });
+    }
+    if (selectedEns) handleOpenHeures(selectedEns);
     await loadEnseignants();
+    setEditingHeureId(null);
+    setHeuresForm({
+      faculteId: "",
+      gradeId: grades[0]?.id ? String(grades[0].id) : "",
+      statut: "Vacataire",
+      heuresET: 0,
+      heuresED: 0,
+      heuresEP: 0,
+      heuresSoutenance: 0,
+      heuresRecherche: 0,
+      obligation: 0,
+    });
   };
 
   const handleDeleteHeures = async (id: number) => {
+    if (!confirm("Supprimer cette ligne d'heures ?")) return;
     await fetch(`/api/heures/${id}`, { method: "DELETE" });
     if (selectedEns) handleOpenHeures(selectedEns);
     await loadEnseignants();
   };
 
-  // ── Fiche individuelle ─────────────────────────────────────────────────────
-  const handleOpenFiche = async (e: Enseignant) => {
+  // ── Fiche ───────────────────────────────────────────────────────────────────
+  const handleOpenFiche = async (e: EnseignantRow) => {
     if (!selectedAnnee) return;
     const num = prompt("N° de l'état :", "0001") || "0001";
-    const res = await fetch(
-      `/api/export/fiche?enseignantId=${e.id}&anneeId=${selectedAnnee.id}&numeroEtat=${num}`
-    );
+    const res = await fetch(`/api/export/fiche?enseignantId=${e.id}&anneeId=${selectedAnnee.id}&numeroEtat=${num}`);
     const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Erreur génération fiche");
+      return;
+    }
     setFicheData(data);
     setSelectedEns(e);
     setShowFicheModal(true);
   };
 
-  // ── Préparation Paiement ───────────────────────────────────────────────────
-  const handleOpenPaiement = (e: Enseignant) => {
+  // ── Paiement ────────────────────────────────────────────────────────────────
+  const handleOpenPaiement = (e: EnseignantRow) => {
     setSelectedEns(e);
-    const calc = calcRow(e);
-    // Detect tranche number based on existing payments
-    const trancheNum = Math.floor((e.total_avance || 0) / calc.montantNet * 100);
-    
     setPaiementForm({
       pourcentageTranche: 100,
       montantAvance: 0,
@@ -476,17 +671,27 @@ export default function HomePage() {
     await loadEnseignants();
   };
 
-  // ── Faculté ─────────────────────────────────────────────────────────────────
+  // ── Facultés ────────────────────────────────────────────────────────────────
   const handleSaveFac = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("/api/facultes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(facForm),
-    });
-    setShowFacModal(false);
-    setFacForm({ etablissement: "", mention: "", parcours: "", niveau: "", code: "" });
-    loadFacultes();
+    setFacError("");
+    try {
+      const res = await fetch("/api/facultes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(facForm),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setFacError(err.error || "Erreur");
+        return;
+      }
+      setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", niveau: "", code: "" });
+      setFacSuggestions({});
+      loadFacultes();
+    } catch (err: any) {
+      setFacError(err.message);
+    }
   };
 
   const handleDeleteFac = async (id: number) => {
@@ -495,7 +700,7 @@ export default function HomePage() {
     loadFacultes();
   };
 
-  // ── Année ─────────────────────────────────────────────────────────────────
+  // ── Années ──────────────────────────────────────────────────────────────────
   const handleSaveAnnee = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch("/api/annees", {
@@ -503,7 +708,6 @@ export default function HomePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(anneeForm),
     });
-    setShowAnneeModal(false);
     setAnneeForm({ libelle: "", tranche: "Première tranche", active: false, appliquerIRSA: true, tauxIRSA: 20, plafondPaiement: "" });
     loadAnnees();
   };
@@ -520,91 +724,70 @@ export default function HomePage() {
     }
   };
 
-  // Calculate paiement preview
   const paiementPreview = useMemo(() => {
     if (!selectedEns || !selectedAnnee) return null;
     const calc = calcRow(selectedEns);
     const montantTranche = Math.round(calc.montantNet * paiementForm.pourcentageTranche / 100);
     const montantPaye = montantTranche - paiementForm.montantAvance;
     const resteAPayer = calc.montantNet - (selectedEns.total_avance || 0) - montantPaye;
-    
-    return {
-      ...calc,
-      montantTranche,
-      montantPaye: Math.max(0, montantPaye),
-      resteAPayer: Math.max(0, resteAPayer),
-    };
+    return { ...calc, montantTranche, montantPaye: Math.max(0, montantPaye), resteAPayer: Math.max(0, resteAPayer) };
   }, [selectedEns, selectedAnnee, paiementForm, calcRow]);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-indigo-50">
-      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      {/* HEADER */}
       <header className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-indigo-900 text-white shadow-lg sticky top-0 z-40">
-        <div className="max-w-[1600px] mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
+        <div className="max-w-[1800px] mx-auto px-3 sm:px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <GraduationCap size={32} className="text-indigo-300" />
+              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+                <GraduationCap size={22} className="text-white" />
+              </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">HC-Manager</h1>
-                <p className="text-xs text-indigo-300">Gestion des Heures Complémentaires</p>
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight">HC-Manager</h1>
+                <p className="text-[10px] sm:text-xs text-indigo-200">Gestion des Heures Complémentaires - Madagascar</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Année selector */}
-              <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
-                <Calendar size={16} className="text-indigo-300" />
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 backdrop-blur">
+                <Calendar size={16} className="text-indigo-200" />
                 <select
                   value={selectedAnnee?.id || ""}
                   onChange={(e) => {
-                    const a = annees.find(x => x.id === Number(e.target.value));
+                    const a = annees.find((x) => x.id === Number(e.target.value));
                     if (a) setSelectedAnnee(a);
                   }}
                   className="bg-transparent text-white text-sm font-medium outline-none cursor-pointer"
                 >
-                  {annees.map(a => (
+                  {annees.map((a) => (
                     <option key={a.id} value={a.id} className="text-gray-900">
-                      {a.libelle} {a.active && "✓"}
+                      {a.libelle} {a.active ? "✓" : ""}
                     </option>
                   ))}
                 </select>
               </div>
-
-              {/* Tranche indicator */}
               {selectedAnnee && (
-                <div className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-medium">
-                  {selectedAnnee.tranche}
-                </div>
+                <div className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-medium hidden sm:block">{selectedAnnee.tranche}</div>
               )}
-
-              {/* IRSA indicator */}
               {selectedAnnee && (
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
-                  selectedAnnee.appliquerIRSA
-                    ? "bg-red-500/20 text-red-200"
-                    : "bg-green-500/20 text-green-200"
-                }`}>
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                    selectedAnnee.appliquerIRSA ? "bg-red-500/20 text-red-200 border border-red-400/30" : "bg-green-500/20 text-green-200 border border-green-400/30"
+                  }`}
+                >
                   {selectedAnnee.appliquerIRSA ? (
                     <>
-                      <AlertCircle size={12} />
-                      IRSA {selectedAnnee.tauxIRSA}%
+                      <AlertCircle size={12} /> IRSA {selectedAnnee.tauxIRSA}%
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={12} />
-                      Sans IRSA
+                      <CheckCircle2 size={12} /> Sans IRSA
                     </>
                   )}
                 </div>
               )}
-
-              <button
-                onClick={() => setShowAnneeModal(true)}
-                className="p-2 rounded-lg hover:bg-white/10 transition"
-                title="Gérer les années"
-              >
+              <button onClick={() => setShowAnneeModal(true)} className="p-2 rounded-lg hover:bg-white/10 transition" title="Paramètres années">
                 <Settings size={18} />
               </button>
             </div>
@@ -612,37 +795,34 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* ─── MAIN CONTENT ─────────────────────────────────────────────────── */}
-      <main className="max-w-[1600px] mx-auto px-4 py-6 space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard icon={<Users />} label="Enseignants" value={stats.total} sub={`${stats.perm} perm. · ${stats.vacat} vac.`} color="blue" />
-          <StatCard icon={<Clock />} label="Total Heures" value={`${stats.totalHeures.toFixed(0)}h`} sub="Heures complémentaires" color="emerald" />
-          <StatCard icon={<DollarSign />} label="Montant Net Total" value={formatAriary(stats.montant)} sub="À payer" color="amber" />
-          <StatCard icon={<Building2 />} label="Facultés" value={facultes.length} sub="Établissements" color="purple" />
-          <StatCard icon={<GraduationCap />} label="Grades" value={grades.length} sub="Niveaux" color="rose" />
+      <main className="max-w-[1800px] mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5">
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+          <StatCard icon={<Users size={18} />} label="Enseignants HC" value={stats.total} sub={`${stats.perm} perm. · ${stats.vacat} vac.`} color="blue" />
+          <StatCard icon={<Clock size={18} />} label="Total Heures" value={`${stats.totalHeures.toFixed(0)}h`} sub="HC Brut" color="emerald" />
+          <StatCard icon={<DollarSign size={18} />} label="Montant Net Total" value={formatAriary(stats.montant)} sub="À payer" color="amber" />
+          <StatCard icon={<Building2 size={18} />} label="Facultés" value={facultes.length} sub="Établissements" color="purple" />
+          <StatCard icon={<GraduationCap size={18} />} label="Base Enseignants" value={allEnseignants.length} sub="Tous confondus" color="rose" />
         </div>
 
         {/* Toolbar */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Search */}
-              <div className="relative">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[250px]">
+              <div className="relative flex-1 max-w-[280px]">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Rechercher..."
+                  placeholder="Rechercher enseignant, cin..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-64 transition"
+                  className="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-full transition"
                 />
               </div>
-              {/* Filters */}
               <select
                 value={filterStatut}
                 onChange={(e) => setFilterStatut(e.target.value)}
-                className="px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="px-2 sm:px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               >
                 <option value="Tous">Tous statuts</option>
                 <option value="Permanent">Permanent</option>
@@ -651,43 +831,53 @@ export default function HomePage() {
               <select
                 value={filterGrade}
                 onChange={(e) => setFilterGrade(e.target.value)}
-                className="px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="px-2 sm:px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               >
                 <option value="Tous">Tous grades</option>
-                {grades.map(g => <option key={g.code} value={g.code}>{g.code} - {g.libelle}</option>)}
+                {grades.map((g) => (
+                  <option key={g.code} value={g.code}>
+                    {g.code} - {g.libelle}
+                  </option>
+                ))}
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <button
                 onClick={handleOpenAddHeures}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
               >
                 <BarChart3 size={16} /> Saisir Heures
               </button>
               <button
+                onClick={() => setShowAllEnsModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition shadow-sm"
+              >
+                <Users size={16} /> Enseignants
+              </button>
+              <button
                 onClick={() => setShowFacModal(true)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-sm"
               >
                 <Building2 size={16} /> Facultés
               </button>
               <button
                 onClick={() => setShowGradeModal(true)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm"
               >
                 <GraduationCap size={16} /> Grades
               </button>
               <button
                 onClick={handleAddEns}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm"
               >
-                <Plus size={18} /> Nouvel Enseignant
+                <Plus size={16} /> Nouveau
               </button>
             </div>
           </div>
         </div>
 
-        {/* TABLE */}
+        {/* TABLE PRINCIPALE conforme prompt.md */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-20">
@@ -695,11 +885,32 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-[12px] sm:text-sm">
                 <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
                   <tr>
-                    {["N°", "Nom et Prénoms", "Grade", "Statut", "Établissement", "ET", "ED", "EP", "Sout.", "Rech.", "HC Brut", "Oblig.", "HC Net", "Brut", "IRSA", "Net", "Actions"].map(h => (
-                      <th key={h} className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600 text-center whitespace-nowrap">
+                    {[
+                      "N°",
+                      "Nom et Prénoms",
+                      "Grade (HC)",
+                      "Statut (HC)",
+                      "Établissement",
+                      "ET",
+                      "ED",
+                      "EP",
+                      "Sout.",
+                      "Rech.",
+                      "HC Brut",
+                      "Oblig.",
+                      "HC Net",
+                      "Brut (Ar)",
+                      "IRSA",
+                      "Net (Ar)",
+                      "Actions",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-2 sm:px-3 py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-600 text-center whitespace-nowrap"
+                      >
                         {h}
                       </th>
                     ))}
@@ -711,74 +922,59 @@ export default function HomePage() {
                       <td colSpan={17} className="text-center py-16 text-slate-400">
                         <GraduationCap size={40} className="mx-auto mb-3 opacity-30" />
                         <p className="font-medium">Aucun enseignant avec heures pour {selectedAnnee?.libelle}</p>
-                        <button onClick={handleOpenAddHeures} className="mt-3 text-emerald-600 hover:underline text-sm">
+                        <p className="text-xs mt-1">Le tableau liste les HC stockés dans la table heures (grade & statut historiques)</p>
+                        <button onClick={handleOpenAddHeures} className="mt-3 text-emerald-600 hover:underline text-sm font-medium">
                           + Saisir des heures complémentaires
                         </button>
                       </td>
                     </tr>
                   ) : (
                     filtered.map((e, idx) => {
-                      const { hc, obligation, hcArr, montantBrut, irsa, net } = calcRow(e);
+                      const { hcBrut, obligation, hcArr, montantBrut, irsa, net } = calcRow(e);
                       return (
-                        <tr
-                          key={e.id}
-                          className={`hover:bg-indigo-50/50 transition ${
-                            e.statut === "Permanent" ? "bg-purple-50/20" : "bg-emerald-50/20"
-                          }`}
-                        >
-                          <td className="px-3 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
-                          <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">
-                            {e.nomPrenom}
-                            {e.specialite && <p className="text-xs text-slate-400 font-normal">{e.specialite}</p>}
+                        <tr key={e.id} className={`hover:bg-indigo-50/50 transition ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}>
+                          <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
+                          <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]">
+                            <div className="truncate">{e.nomPrenom}</div>
+                            {e.specialite && <div className="text-[10px] text-slate-400 font-normal truncate">{e.specialite}</div>}
                           </td>
-                          <td className="px-3 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <GradeBadge grade={e.gradeCode || "-"} />
                           </td>
-                          <td className="px-3 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <StatutBadge statut={e.statut} />
                           </td>
-                          <td className="px-3 py-2.5 text-center text-xs text-slate-600 max-w-[120px] truncate">
-                            {e.etablissementPrincipal || "—"}
+                          <td className="px-2 py-2.5 text-center text-[11px] text-slate-600 max-w-[120px] truncate" title={e.faculteEtablissement || e.etablissementPrincipal || ""}>
+                            {e.faculteEtablissement || e.etablissementPrincipal || "—"}
                           </td>
                           {[e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche].map((v, i) => (
-                            <td key={i} className="px-2 py-2.5 text-center text-xs font-mono">
+                            <td key={i} className="px-1 py-2.5 text-center text-xs font-mono">
                               {v ? v.toFixed(v % 1 === 0 ? 0 : 1) : <span className="text-slate-300">-</span>}
                             </td>
                           ))}
-                          <td className="px-2 py-2.5 text-center text-xs font-semibold text-indigo-700">{hc.toFixed(0)}</td>
-                          <td className="px-2 py-2.5 text-center text-xs text-orange-600">
-                            {e.exempte ? "Exempt" : obligation}
-                          </td>
-                          <td className="px-2 py-2.5 text-center text-xs font-semibold text-green-700">{hcArr}</td>
+                          <td className="px-1 py-2.5 text-center text-xs font-semibold text-indigo-700">{hcBrut.toFixed(0)}</td>
+                          <td className="px-1 py-2.5 text-center text-xs text-orange-600">{obligation === 0 ? "0" : obligation}</td>
+                          <td className="px-1 py-2.5 text-center text-xs font-bold text-green-700">{hcArr}</td>
                           <td className="px-2 py-2.5 text-center text-xs font-mono">{montantBrut.toLocaleString("fr-MG")}</td>
-                          <td className="px-2 py-2.5 text-center text-xs font-mono text-red-600">
-                            {irsa > 0 ? `-${irsa.toLocaleString("fr-MG")}` : "—"}
-                          </td>
+                          <td className="px-1 py-2.5 text-center text-[11px] font-mono text-red-600">{irsa > 0 ? `-${irsa.toLocaleString("fr-MG")}` : "—"}</td>
                           <td className="px-2 py-2.5 text-center">
-                            <span className={`text-xs font-bold ${net > 0 ? "text-emerald-700" : "text-red-600"}`}>
-                              {net.toLocaleString("fr-MG")}
-                            </span>
+                            <span className={`text-xs font-bold ${net > 0 ? "text-emerald-700" : "text-red-600"}`}>{net.toLocaleString("fr-MG")}</span>
                           </td>
-                          <td className="px-2 py-2.5">
+                          <td className="px-1 py-2.5">
                             <div className="flex items-center justify-center gap-0.5">
-                              <button onClick={() => handleEditEns(e)} title="Modifier"
-                                className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 transition">
+                              <button onClick={() => handleEditEns(e)} title="Modifier infos base (sans grade/statut)" className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 transition">
                                 <Edit size={14} />
                               </button>
-                              <button onClick={() => handleOpenHeures(e)} title="Heures"
-                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 transition">
+                              <button onClick={() => handleOpenHeures(e)} title="Gérer les heures (grade/statut historiques)" className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 transition">
                                 <BarChart3 size={14} />
                               </button>
-                              <button onClick={() => handleOpenPaiement(e)} title="Préparer paiement"
-                                className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition">
+                              <button onClick={() => handleOpenPaiement(e)} title="Préparer paiement" className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition">
                                 <Wallet size={14} />
                               </button>
-                              <button onClick={() => handleOpenFiche(e)} title="Fiche"
-                                className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition">
+                              <button onClick={() => handleOpenFiche(e)} title="Fiche individuelle" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition">
                                 <FileText size={14} />
                               </button>
-                              <button onClick={() => handleDeleteEns(e.id)} title="Supprimer"
-                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition">
+                              <button onClick={() => handleDeleteEns(e.id)} title="Supprimer" className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition">
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -791,75 +987,59 @@ export default function HomePage() {
               </table>
             </div>
           )}
-
           {filtered.length > 0 && (
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>{filtered.length} enseignant(s) – {selectedAnnee?.libelle}</span>
-              <span className="font-semibold text-indigo-700">
-                Total Net : {formatAriary(stats.montant)}
-              </span>
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>{filtered.length} enseignant(s) – Année {selectedAnnee?.libelle} – Grade/Statut issus de la table heures (historique)</span>
+              <span className="font-semibold text-indigo-700">Total Net : {formatAriary(stats.montant)}</span>
             </div>
           )}
         </div>
 
-        {/* Grades Display */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* Grades cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {grades.map((g) => (
-            <div key={g.code} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
+            <div key={g.code} className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-2">
                 <GradeBadge grade={g.code} />
-                <span className="text-xs text-slate-400">Taux horaire</span>
+                <span className="text-[10px] text-slate-400 uppercase">Taux horaire</span>
               </div>
-              <p className="text-xs text-slate-500">{g.libelle}</p>
-              <p className="text-xl font-bold text-indigo-800 mt-1">{g.tauxHoraire.toLocaleString("fr-MG")} Ar/h</p>
-              {g.obligationService > 0 && (
-                <p className="text-xs text-orange-600 mt-0.5">Obligation: {g.obligationService}h</p>
-              )}
+              <p className="text-xs text-slate-500 truncate">{g.libelle}</p>
+              <p className="text-lg sm:text-xl font-bold text-indigo-800 mt-1">{g.tauxHoraire.toLocaleString("fr-MG")} Ar/h</p>
             </div>
           ))}
         </div>
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          MODALS
-      ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════ MODALS ═══════════════════════════════ */}
 
-      {/* Modal Saisie Heures avec Autocomplete */}
-      <Modal isOpen={showAddHeuresModal} onClose={() => setShowAddHeuresModal(false)}
-        title="📋 Saisir des Heures Complémentaires" size="full">
+      {/* Modal Saisir Heures - 2 étapes conforme prompt.md */}
+      <Modal isOpen={showAddHeuresModal} onClose={() => setShowAddHeuresModal(false)} title="📋 Saisir des Heures Complémentaires" size="full">
         <div className="space-y-5">
-          {/* Recherche enseignant */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
-            <label className="block text-base font-semibold text-slate-800 mb-3">
-              🔍 Rechercher un enseignant
-            </label>
-            
-            <div className="flex gap-3">
-              {/* Search input */}
+          {/* Étape 1: Recherche/Création enseignant */}
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 sm:p-5 border border-indigo-100">
+            <label className="block text-sm sm:text-base font-semibold text-slate-800 mb-3">Étape 1: Rechercher / Créer l&apos;enseignant</label>
+            <p className="text-xs text-slate-600 mb-3">Saisie assistée (autocomplete) sur la base de tous les enseignants. Le bouton Créer est visible directement.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tapez le nom de l'enseignant..."
+                  placeholder="Tapez le nom (ex: RAKOTO)..."
                   value={ensSearchQuery}
                   onChange={(e) => setEnsSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 text-base border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white shadow-sm"
+                  className="w-full pl-11 pr-4 py-3 text-sm sm:text-base border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white shadow-sm"
                 />
               </div>
-              
-              {/* Bouton Créer visible directement */}
               {ensSearchQuery.length >= 2 && !selectedEnsForHeures && (
                 <button
                   onClick={handleOpenCreateEnseignant}
-                  className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-md whitespace-nowrap"
+                  className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-md whitespace-nowrap text-sm"
                 >
-                  <Plus size={20} />
-                  Créer &quot;{ensSearchQuery}&quot;
+                  <Plus size={18} /> Créer &quot;{ensSearchQuery.toUpperCase()}&quot;
                 </button>
               )}
             </div>
-            
-            {/* Liste des résultats */}
+
             {ensSearchQuery.length >= 2 && !selectedEnsForHeures && (
               <div className="mt-4">
                 {ensSearchResults.length > 0 ? (
@@ -868,45 +1048,41 @@ export default function HomePage() {
                       <p className="text-xs font-medium text-slate-500">{ensSearchResults.length} enseignant(s) trouvé(s)</p>
                     </div>
                     <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
-                      {ensSearchResults.map(ens => (
+                      {ensSearchResults.map((ens) => (
                         <button
                           key={ens.id}
                           onClick={() => handleSelectEnsForHeures(ens)}
                           className="w-full px-4 py-3 text-left hover:bg-indigo-50 flex items-center justify-between transition-colors"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                              {ens.nomPrenom.charAt(0)}
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                              {ens.nom.charAt(0)}
                             </div>
                             <div>
-                              <span className="font-semibold text-slate-800">{ens.nomPrenom}</span>
+                              <span className="font-semibold text-slate-800 text-sm">{ens.nomPrenom}</span>
                               <p className="text-xs text-slate-500">{ens.etablissementPrincipal || "Non spécifié"}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {ens.gradeCode && <GradeBadge grade={ens.gradeCode} />}
-                            <StatutBadge statut={ens.statut} />
-                          </div>
+                          <div className="text-xs text-slate-400">{ens.cin || ""}</div>
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
-                    <AlertCircle size={20} className="text-amber-500" />
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                    <AlertCircle size={18} className="text-amber-600 mt-0.5" />
                     <div>
-                      <p className="font-medium text-amber-800">Aucun enseignant trouvé pour &quot;{ensSearchQuery}&quot;</p>
-                      <p className="text-sm text-amber-600">Cliquez sur le bouton vert pour créer un nouvel enseignant</p>
+                      <p className="font-medium text-amber-800 text-sm">Aucun enseignant trouvé pour &quot;{ensSearchQuery}&quot;</p>
+                      <p className="text-xs text-amber-700 mt-1">Cliquez sur le bouton vert pour créer un nouvel enseignant avec le formulaire complet.</p>
                     </div>
                   </div>
                 )}
               </div>
             )}
-            
             {ensSearchQuery.length < 2 && !selectedEnsForHeures && (
-              <p className="text-sm text-slate-500 mt-3 flex items-center gap-2">
-                <span className="inline-block w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-xs flex items-center justify-center font-bold">?</span>
-                Tapez au moins 2 caractères pour rechercher
+              <p className="text-xs text-slate-500 mt-3 flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold">?</span>
+                Tapez au moins 2 caractères pour rechercher (nom en MAJUSCULES)
               </p>
             )}
           </div>
@@ -917,45 +1093,131 @@ export default function HomePage() {
               <div className="flex items-center gap-3">
                 <CheckCircle2 size={20} className="text-indigo-600" />
                 <div>
-                  <p className="font-semibold text-indigo-900">{selectedEnsForHeures.nomPrenom}</p>
-                  <p className="text-xs text-indigo-600">
-                    {selectedEnsForHeures.gradeCode || "Sans grade"} • {selectedEnsForHeures.statut}
-                  </p>
+                  <p className="font-semibold text-indigo-900 text-sm">{selectedEnsForHeures.nomPrenom}</p>
+                  <p className="text-xs text-indigo-600">Base: {selectedEnsForHeures.etablissementPrincipal || "—"} • CIN: {selectedEnsForHeures.cin || "—"}</p>
                 </div>
               </div>
-              <button onClick={() => { setSelectedEnsForHeures(null); setEnsSearchQuery(""); }}
-                className="p-1 hover:bg-indigo-100 rounded">
+              <button onClick={() => setSelectedEnsForHeures(null)} className="p-1.5 hover:bg-indigo-100 rounded-lg">
                 <X size={16} className="text-indigo-600" />
               </button>
             </div>
           )}
 
-          {/* Form heures */}
+          {/* Étape 2: Saisir infos HC avec grade et statut stockés dans heures */}
           {selectedEnsForHeures && (
-            <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+            <div className="bg-white rounded-xl border-2 border-emerald-100 p-4 sm:p-5 space-y-4">
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2 text-sm sm:text-base">
+                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">2</span>
+                Saisir les informations HC (Grade & Statut historiques)
+              </h3>
+              <p className="text-xs text-slate-500 bg-amber-50 p-2 rounded border border-amber-100">
+                ⚠️ Grade et Statut sont stockés dans la table <code>heures</code> pour garder l&apos;historique correct en cas de promotion ou changement de statut.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Grade * (au moment de la saisie)</label>
+                  <select
+                    value={heuresHCForm.gradeId}
+                    onChange={(e) => setHeuresHCForm({ ...heuresHCForm, gradeId: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    <option value="">-- Sélectionner --</option>
+                    {grades.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.code} - {g.libelle} ({g.tauxHoraire.toLocaleString()} Ar/h)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Statut * (au moment)</label>
+                  <select
+                    value={heuresHCForm.statut}
+                    onChange={(e) => handleStatutChange(e.target.value as any)}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    <option value="Vacataire">Vacataire</option>
+                    <option value="Permanent">Permanent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Obligation (défaut 125h, 0 vacataire)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={heuresHCForm.obligation}
+                    onChange={(e) => setHeuresHCForm({ ...heuresHCForm, obligation: Number(e.target.value) })}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Permanent: 125h par défaut. Vacataire: 0h</p>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté / Parcours</label>
-                <select value={heuresForm.faculteId} onChange={(e) => setHeuresForm({ ...heuresForm, faculteId: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                  <option value="">-- Sélectionner --</option>
-                  {facultes.map(f => (
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Faculté / Parcours (saisie assistée)</label>
+                <select
+                  value={heuresHCForm.faculteId}
+                  onChange={(e) => setHeuresHCForm({ ...heuresHCForm, faculteId: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="">-- Sélectionner (optionnel) --</option>
+                  {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.etablissement} {f.mention && `- ${f.mention}`} {f.parcours && `- ${f.parcours}`}
+                      {f.etablissement} - {f.domaine} - {f.mention} {f.parcours ? `- ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
                     </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau</p>
               </div>
-              <div className="grid grid-cols-5 gap-3">
-                <NumInput label="ET" value={heuresForm.heuresET} onChange={(v) => setHeuresForm({ ...heuresForm, heuresET: v })} />
-                <NumInput label="ED" value={heuresForm.heuresED} onChange={(v) => setHeuresForm({ ...heuresForm, heuresED: v })} />
-                <NumInput label="EP" value={heuresForm.heuresEP} onChange={(v) => setHeuresForm({ ...heuresForm, heuresEP: v })} />
-                <NumInput label="Soutenance" value={heuresForm.heuresSoutenance} onChange={(v) => setHeuresForm({ ...heuresForm, heuresSoutenance: v })} />
-                <NumInput label="Recherche" value={heuresForm.heuresRecherche} onChange={(v) => setHeuresForm({ ...heuresForm, heuresRecherche: v })} />
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-2">Heures complémentaires</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <NumInput label="ET" value={heuresHCForm.heuresET} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresET: v })} />
+                  <NumInput label="ED" value={heuresHCForm.heuresED} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresED: v })} />
+                  <NumInput label="EP" value={heuresHCForm.heuresEP} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresEP: v })} />
+                  <NumInput label="Soutenance" value={heuresHCForm.heuresSoutenance} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresSoutenance: v })} />
+                  <NumInput label="Recherche" value={heuresHCForm.heuresRecherche} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresRecherche: v })} />
+                </div>
               </div>
+
+              {/* Aperçu calcul selon prompt.md */}
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <p className="text-xs font-semibold text-slate-600 mb-2">Aperçu calcul (prompt.md)</p>
+                {(() => {
+                  const hcBrut = heuresHCForm.heuresET + heuresHCForm.heuresED + heuresHCForm.heuresEP + heuresHCForm.heuresSoutenance + heuresHCForm.heuresRecherche;
+                  const { hcNette } = calcHCNette(hcBrut, heuresHCForm.obligation, heuresHCForm.statut);
+                  const hcArr = Math.floor(hcNette);
+                  const taux = grades.find((g) => String(g.id) === heuresHCForm.gradeId)?.tauxHoraire || 0;
+                  const brut = hcArr * taux;
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        HC Brut: <strong>{hcBrut}h</strong>
+                      </div>
+                      <div>
+                        Oblig: <strong>{heuresHCForm.obligation}h</strong>
+                      </div>
+                      <div>
+                        HC Nette: <strong>{hcNette}h</strong> → Arrondie: <strong>{hcArr}h</strong>
+                      </div>
+                      <div>
+                        Brut: <strong>{brut.toLocaleString()} Ar</strong>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
               <div className="flex justify-end">
-                <button onClick={handleAddHeuresForSelected}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
-                  <Plus size={16} /> Enregistrer les heures
+                <button
+                  onClick={handleAddHeuresForSelected}
+                  disabled={!heuresHCForm.gradeId}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 shadow-md"
+                >
+                  <Plus size={16} /> Enregistrer ces heures
                 </button>
               </div>
             </div>
@@ -963,142 +1225,174 @@ export default function HomePage() {
         </div>
       </Modal>
 
-      {/* Modal Enseignant */}
-      <Modal isOpen={showEnsModal} onClose={() => { setShowEnsModal(false); setReturnToHeuresAfterCreate(false); }}
-        title={editEns?.id ? "✏️ Modifier Enseignant" : "➕ Nouvel Enseignant"} size="full">
-        <form onSubmit={handleSaveEns} className="space-y-6">
-          {returnToHeuresAfterCreate && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
-              <CheckCircle2 size={20} className="text-emerald-600" />
-              <p className="text-sm text-emerald-800">
-                Après l&apos;enregistrement, vous serez redirigé vers la saisie des heures.
-              </p>
-            </div>
-          )}
-          
-          {/* Section Identité */}
-          <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
-            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Users size={18} className="text-indigo-600" />
-              Identité
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <Input label="Nom et Prénoms *" value={ensForm.nomPrenom}
-                  onChange={(v) => setEnsForm({ ...ensForm, nomPrenom: v })} required />
-              </div>
-              <Input label="CIN" value={ensForm.cin}
-                onChange={(v) => setEnsForm({ ...ensForm, cin: v })} />
-              <Input label="Date de naissance" value={ensForm.dateNaissance} type="date"
-                onChange={(v) => setEnsForm({ ...ensForm, dateNaissance: v })} />
-              <Input label="Lieu de naissance" value={ensForm.lieuNaissance}
-                onChange={(v) => setEnsForm({ ...ensForm, lieuNaissance: v })} />
-              <Input label="Nationalité" value={ensForm.nationalite}
-                onChange={(v) => setEnsForm({ ...ensForm, nationalite: v })} />
+      {/* Modal Enseignant Base (sans grade/statut) */}
+      <Modal
+        isOpen={showEnsModal}
+        onClose={() => {
+          setShowEnsModal(false);
+          setReturnToHeuresAfterCreate(false);
+        }}
+        title={editEns?.id ? `✏️ Modifier ${editEns.nomPrenom}` : "➕ Nouvel Enseignant (infos permanentes)"}
+        size="full"
+      >
+        <EnseignantForm
+          initialData={
+            editEns
+              ? {
+                  nom: editEns.nom,
+                  prenom: editEns.prenom || "",
+                  cin: editEns.cin || "",
+                  telephone: editEns.telephone || "",
+                  email: editEns.email || "",
+                  rib: editEns.rib || "",
+                  etablissementPrincipal: editEns.etablissementPrincipal || "",
+                  specialite: editEns.specialite || "",
+                  adresse: (editEns as any).adresse || "",
+                  nationalite: (editEns as any).nationalite || "Malagasy",
+                  dateNaissance: (editEns as any).dateNaissance || "",
+                  lieuNaissance: (editEns as any).lieuNaissance || "",
+                  dateRecrutement: (editEns as any).dateRecrutement || "",
+                  dateCIN: (editEns as any).dateCIN || "",
+                }
+              : undefined
+          }
+          onSave={handleSaveEns}
+          onCancel={() => {
+            setShowEnsModal(false);
+            setReturnToHeuresAfterCreate(false);
+          }}
+          loading={formLoading}
+        />
+      </Modal>
+
+      {/* Modal Tous Enseignants */}
+      <Modal isOpen={showAllEnsModal} onClose={() => setShowAllEnsModal(false)} title="👥 Base Enseignants - Tous les enseignants" size="full">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+            <p className="text-xs text-slate-600">
+              Liste complète de TOUS les enseignants de la base (indépendante de l&apos;année). Utile pour mettre à jour les infos (contact, RIB, etc.)
+            </p>
+            <div className="relative w-full sm:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={allEnsSearch}
+                onChange={(e) => setAllEnsSearch(e.target.value)}
+                placeholder="Rechercher par nom/prénom..."
+                className="pl-9 pr-3 py-2 w-full text-sm border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
             </div>
           </div>
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  {["Nom", "Prénom", "CIN", "Tél", "Email", "Établissement", "RIB", "Actions"].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredAllEns.map((e) => (
+                  <tr key={e.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-bold">{e.nom}</td>
+                    <td className="px-3 py-2">{e.prenom || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{e.cin || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{e.telephone || "—"}</td>
+                    <td className="px-3 py-2 text-xs max-w-[150px] truncate">{e.email || "—"}</td>
+                    <td className="px-3 py-2 text-xs max-w-[120px] truncate">{e.etablissementPrincipal || "—"}</td>
+                    <td className="px-3 py-2 text-xs max-w-[150px] truncate">{e.rib || "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => handleEditEns(e)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                          <Edit size={14} />
+                        </button>
+                        <button onClick={() => handleDeleteEns(e.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredAllEns.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Aucun enseignant</p>}
+          </div>
+          <div className="text-xs text-slate-500">{filteredAllEns.length} enseignant(s) au total</div>
+        </div>
+      </Modal>
 
-          {/* Section Professionnelle */}
-          <div className="bg-indigo-50 rounded-xl p-5 border border-indigo-200">
-            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <GraduationCap size={18} className="text-indigo-600" />
-              Informations Professionnelles
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+      {/* Modal Heures existantes - gère grade/statut/obligation historiques */}
+      <Modal
+        isOpen={showHeuresModal}
+        onClose={() => {
+          setShowHeuresModal(false);
+          loadEnseignants();
+          setEditingHeureId(null);
+        }}
+        title={`📋 Heures ${selectedAnnee?.libelle || ""} – ${selectedEns?.nomPrenom || ""}`}
+        size="2xl"
+      >
+        <div className="space-y-4">
+          {/* Formulaire ajout / édition */}
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+            <h4 className="font-semibold text-slate-700 text-sm">
+              {editingHeureId ? "✏️ Modifier cette ligne d'heures (grade/statut historiques)" : "➕ Ajouter des heures (avec grade & statut)"}
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Grade *</label>
-                <select value={ensForm.gradeId} onChange={(e) => setEnsForm({ ...ensForm, gradeId: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Grade *</label>
+                <select
+                  value={heuresForm.gradeId}
+                  onChange={(e) => setHeuresForm({ ...heuresForm, gradeId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
                   <option value="">-- Sélectionner --</option>
-                  {grades.map(g => (
+                  {grades.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.code} - {g.libelle} ({g.tauxHoraire.toLocaleString()} Ar/h)
+                      {g.code} - {g.libelle}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Statut *</label>
-                <select value={ensForm.statut} onChange={(e) => setEnsForm({ ...ensForm, statut: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                  <option value="Permanent">Permanent</option>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Statut *</label>
+                <select
+                  value={heuresForm.statut}
+                  onChange={(e) =>
+                    setHeuresForm({
+                      ...heuresForm,
+                      statut: e.target.value as any,
+                      obligation: e.target.value === "Vacataire" ? 0 : heuresForm.obligation === 0 ? 125 : heuresForm.obligation,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
                   <option value="Vacataire">Vacataire</option>
+                  <option value="Permanent">Permanent</option>
                 </select>
               </div>
-              <Input label="Date de recrutement" value={ensForm.dateRecrutement} type="date"
-                onChange={(v) => setEnsForm({ ...ensForm, dateRecrutement: v })} />
-              <Input label="Spécialité" value={ensForm.specialite}
-                onChange={(v) => setEnsForm({ ...ensForm, specialite: v })} />
-              <div className="col-span-2">
-                <Input label="Établissement principal" value={ensForm.etablissementPrincipal}
-                  onChange={(v) => setEnsForm({ ...ensForm, etablissementPrincipal: v })} />
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Obligation (h)</label>
+                <input
+                  type="number"
+                  value={heuresForm.obligation}
+                  onChange={(e) => setHeuresForm({ ...heuresForm, obligation: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
-            </div>
-          </div>
-
-          {/* Section Contact */}
-          <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-200">
-            <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <FileText size={18} className="text-emerald-600" />
-              Contact & Coordonnées Bancaires
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <Input label="Téléphone" value={ensForm.telephone}
-                onChange={(v) => setEnsForm({ ...ensForm, telephone: v })} />
-              <Input label="Email" value={ensForm.email}
-                onChange={(v) => setEnsForm({ ...ensForm, email: v })} />
-              <div className="col-span-3">
-                <Input label="Adresse" value={ensForm.adresse}
-                  onChange={(v) => setEnsForm({ ...ensForm, adresse: v })} />
-              </div>
-              <div className="col-span-2">
-                <Input label="RIB (Relevé d'Identité Bancaire)" value={ensForm.rib}
-                  onChange={(v) => setEnsForm({ ...ensForm, rib: v })} />
-              </div>
-              <Input label="Banque" value={ensForm.banque}
-                onChange={(v) => setEnsForm({ ...ensForm, banque: v })} />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <button type="button" onClick={() => { setShowEnsModal(false); setReturnToHeuresAfterCreate(false); }}
-              className="px-5 py-2.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 font-medium">
-              Annuler
-            </button>
-            <button type="submit" disabled={formLoading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 shadow-md">
-              {formLoading ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  {editEns?.id ? "Mettre à jour" : "Créer l'enseignant"}
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Modal Heures */}
-      <Modal isOpen={showHeuresModal} onClose={() => { setShowHeuresModal(false); loadEnseignants(); }}
-        title={`📋 Heures – ${selectedEns?.nomPrenom || ""}`} size="2xl">
-        <div className="space-y-4">
-          {/* Form to add */}
-          <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-            <h4 className="font-semibold text-slate-700">Ajouter des heures</h4>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-3">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté / Parcours</label>
-                <select value={heuresForm.faculteId} onChange={(e) => setHeuresForm({ ...heuresForm, faculteId: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                  <option value="">-- Sélectionner --</option>
-                  {facultes.map(f => (
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté (Établissement → Domaine → Mention → Parcours)</label>
+                <select
+                  value={heuresForm.faculteId}
+                  onChange={(e) => setHeuresForm({ ...heuresForm, faculteId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="">-- Aucune / Non spécifié --</option>
+                  {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.etablissement} {f.mention && `- ${f.mention}`} {f.parcours && `- ${f.parcours}`}
+                      {f.etablissement} | {f.domaine} | {f.mention} {f.parcours ? `| ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
                     </option>
                   ))}
                 </select>
@@ -1109,146 +1403,215 @@ export default function HomePage() {
               <NumInput label="Soutenance" value={heuresForm.heuresSoutenance} onChange={(v) => setHeuresForm({ ...heuresForm, heuresSoutenance: v })} />
               <NumInput label="Recherche" value={heuresForm.heuresRecherche} onChange={(v) => setHeuresForm({ ...heuresForm, heuresRecherche: v })} />
             </div>
-            <button onClick={handleAddHeures}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-              <Plus size={16} /> Ajouter
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveHeureEdit}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+              >
+                <Plus size={16} /> {editingHeureId ? "Mettre à jour" : "Ajouter ces heures"}
+              </button>
+              {editingHeureId && (
+                <button
+                  onClick={() => {
+                    setEditingHeureId(null);
+                    setHeuresForm({
+                      faculteId: "",
+                      gradeId: grades[0]?.id ? String(grades[0].id) : "",
+                      statut: "Vacataire",
+                      heuresET: 0,
+                      heuresED: 0,
+                      heuresEP: 0,
+                      heuresSoutenance: 0,
+                      heuresRecherche: 0,
+                      obligation: 0,
+                    });
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50"
+                >
+                  Annuler édition
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* List */}
-          {heuresList.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Faculté</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">ET</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">ED</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">EP</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">Sout.</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">Rech.</th>
-                    <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600">Total</th>
-                    <th className="px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {heuresList.map(h => {
-                    const tot = h.heuresET + h.heuresED + h.heuresEP + h.heuresSoutenance + h.heuresRecherche;
-                    return (
-                      <tr key={h.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 text-xs">
-                          {h.faculte?.etablissement || "—"} {h.faculte?.parcours && `- ${h.faculte.parcours}`}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs">{h.heuresET}</td>
-                        <td className="px-2 py-2 text-center text-xs">{h.heuresED}</td>
-                        <td className="px-2 py-2 text-center text-xs">{h.heuresEP}</td>
-                        <td className="px-2 py-2 text-center text-xs">{h.heuresSoutenance}</td>
-                        <td className="px-2 py-2 text-center text-xs">{h.heuresRecherche}</td>
-                        <td className="px-2 py-2 text-center text-xs font-bold text-indigo-700">{tot}</td>
-                        <td className="px-2 py-2 text-center">
-                          <button onClick={() => handleDeleteHeures(h.id)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded">
-                            <Trash2 size={14} />
+          {/* Liste des heures */}
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+            <table className="w-full text-xs sm:text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  {["Grade", "Statut", "Faculté", "ET", "ED", "EP", "Sout", "Rech", "Total", "Oblig", ""].map((h) => (
+                    <th key={h} className="px-2 py-2 text-center text-[11px] font-semibold text-slate-600">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {heuresList.map((h) => {
+                  const total = (h.heuresET || 0) + (h.heuresED || 0) + (h.heuresEP || 0) + (h.heuresSoutenance || 0) + (h.heuresRecherche || 0);
+                  return (
+                    <tr key={h.id} className={`hover:bg-indigo-50/50 ${editingHeureId === h.id ? "bg-yellow-50" : ""}`}>
+                      <td className="px-2 py-2 text-center">
+                        <GradeBadge grade={h.grade?.code || "-"} />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <StatutBadge statut={h.statut} />
+                      </td>
+                      <td className="px-2 py-2 text-[11px] max-w-[150px] truncate">
+                        {h.faculte ? `${h.faculte.etablissement} - ${h.faculte.mention}` : "—"}
+                      </td>
+                      <td className="px-1 py-2 text-center font-mono">{h.heuresET || "-"}</td>
+                      <td className="px-1 py-2 text-center font-mono">{h.heuresED || "-"}</td>
+                      <td className="px-1 py-2 text-center font-mono">{h.heuresEP || "-"}</td>
+                      <td className="px-1 py-2 text-center font-mono">{h.heuresSoutenance || "-"}</td>
+                      <td className="px-1 py-2 text-center font-mono">{h.heuresRecherche || "-"}</td>
+                      <td className="px-1 py-2 text-center font-bold text-indigo-700">{total}</td>
+                      <td className="px-1 py-2 text-center text-orange-600">{h.obligation}</td>
+                      <td className="px-1 py-2 text-center">
+                        <div className="flex gap-1 justify-center">
+                          <button onClick={() => handleEditHeure(h)} className="p-1 text-indigo-600 hover:bg-indigo-100 rounded">
+                            <Edit size={12} />
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <button onClick={() => handleDeleteHeures(h.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {heuresList.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="text-center py-6 text-slate-400 text-xs">
+                      Aucune heure saisie pour cette année
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {heuresList.length > 0 && (
+            <div className="bg-indigo-50 rounded-lg p-3 text-xs">
+              <p>
+                <strong>Totaux:</strong> ET {heuresList.reduce((s, h) => s + (h.heuresET || 0), 0)}h • ED{" "}
+                {heuresList.reduce((s, h) => s + (h.heuresED || 0), 0)}h • EP {heuresList.reduce((s, h) => s + (h.heuresEP || 0), 0)}h • Sout{" "}
+                {heuresList.reduce((s, h) => s + (h.heuresSoutenance || 0), 0)}h • Rech {heuresList.reduce((s, h) => s + (h.heuresRecherche || 0), 0)}h • Total Brut{" "}
+                {heuresList.reduce((s, h) => s + (h.heuresET || 0) + (h.heuresED || 0) + (h.heuresEP || 0) + (h.heuresSoutenance || 0) + (h.heuresRecherche || 0), 0)}h
+              </p>
             </div>
           )}
         </div>
       </Modal>
 
-      {/* Modal Préparation Paiement */}
-      <Modal isOpen={showPaiementModal} onClose={() => setShowPaiementModal(false)}
-        title="💰 Préparation du Paiement" size="lg">
+      {/* Modal Paiement */}
+      <Modal isOpen={showPaiementModal} onClose={() => setShowPaiementModal(false)} title="💰 Préparation du Paiement" size="lg">
         {selectedEns && paiementPreview && (
           <div className="space-y-4">
-            {/* Info enseignant */}
             <div className="bg-slate-50 rounded-lg p-3">
-              <p className="font-semibold">{selectedEns.nomPrenom}</p>
+              <p className="font-semibold text-sm">{selectedEns.nomPrenom}</p>
               <p className="text-xs text-slate-500">
-                {selectedEns.gradeCode} • {selectedEns.statut} • {selectedEns.etablissementPrincipal}
+                {selectedEns.gradeCode} • {selectedEns.statut} • {selectedEns.etablissementPrincipal || selectedEns.faculteEtablissement}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                HC: {paiementPreview.hcBrut}h brut → Oblig {paiementPreview.obligation}h → Nette {paiementPreview.hcNette}h → Arrondie{" "}
+                <strong>{paiementPreview.hcArr}h</strong>
               </p>
             </div>
 
-            {/* Détection automatique */}
             <div className="grid grid-cols-2 gap-3">
               <div className={`p-3 rounded-lg border ${selectedAnnee?.appliquerIRSA ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
                 <p className="text-xs font-medium text-slate-600">IRSA</p>
-                <p className={`font-bold ${selectedAnnee?.appliquerIRSA ? "text-red-700" : "text-green-700"}`}>
-                  {selectedAnnee?.appliquerIRSA ? `Appliqué (${selectedAnnee.tauxIRSA}%)` : "Non appliqué"}
+                <p className={`font-bold text-sm ${selectedAnnee?.appliquerIRSA ? "text-red-700" : "text-green-700"}`}>
+                  {selectedAnnee?.appliquerIRSA ? `Appliqué (${selectedAnnee.tauxIRSA}%) = -${paiementPreview.irsa.toLocaleString()} Ar` : "Non appliqué"}
                 </p>
               </div>
               <div className="p-3 rounded-lg border bg-indigo-50 border-indigo-200">
-                <p className="text-xs font-medium text-slate-600">Tranche</p>
-                <p className="font-bold text-indigo-700">{selectedAnnee?.tranche}</p>
+                <p className="text-xs font-medium text-slate-600">Tranche / Année</p>
+                <p className="font-bold text-indigo-700 text-sm">
+                  {selectedAnnee?.tranche} – {selectedAnnee?.libelle}
+                </p>
               </div>
             </div>
 
-            {/* Récapitulatif */}
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border border-slate-200 rounded-lg overflow-hidden text-sm">
+              <table className="w-full text-xs">
                 <tbody>
-                  <tr className="border-b"><td className="px-3 py-2">HC Nette (arrondie)</td><td className="px-3 py-2 text-right font-bold">{paiementPreview.hcArr} h</td></tr>
-                  <tr className="border-b"><td className="px-3 py-2">Taux horaire</td><td className="px-3 py-2 text-right">{paiementPreview.taux.toLocaleString("fr-MG")} Ar</td></tr>
-                  <tr className="border-b bg-amber-50"><td className="px-3 py-2 font-bold">Montant Brut</td><td className="px-3 py-2 text-right font-bold text-amber-700">{paiementPreview.montantBrut.toLocaleString("fr-MG")} Ar</td></tr>
-                  {selectedAnnee?.appliquerIRSA && (
-                    <tr className="border-b"><td className="px-3 py-2 text-red-600">IRSA ({selectedAnnee.tauxIRSA}%)</td><td className="px-3 py-2 text-right text-red-600">-{paiementPreview.irsa.toLocaleString("fr-MG")} Ar</td></tr>
-                  )}
-                  <tr className="border-b"><td className="px-3 py-2">Montant Net</td><td className="px-3 py-2 text-right">{paiementPreview.montantNet.toLocaleString("fr-MG")} Ar</td></tr>
-                  {(selectedEns.total_avance || 0) > 0 && (
-                    <tr className="border-b"><td className="px-3 py-2">Déjà payé</td><td className="px-3 py-2 text-right">-{(selectedEns.total_avance || 0).toLocaleString("fr-MG")} Ar</td></tr>
-                  )}
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Montant Brut (HC arrondie × Taux)</td>
+                    <td className="px-3 py-2 text-right font-bold">{paiementPreview.montantBrut.toLocaleString()} Ar</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Montant Net (Brut - IRSA)</td>
+                    <td className="px-3 py-2 text-right">{paiementPreview.montantNet.toLocaleString()} Ar</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Déjà avancé/payé</td>
+                    <td className="px-3 py-2 text-right">-{selectedEns.total_avance.toLocaleString()} Ar</td>
+                  </tr>
+                  <tr className="bg-amber-50 font-bold">
+                    <td className="px-3 py-2">Net à payer (selon prompt.md)</td>
+                    <td className="px-3 py-2 text-right text-amber-800">{paiementPreview.net.toLocaleString()} Ar</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* Form paiement */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Pourcentage de la tranche (%)</label>
-                <input type="number" min={1} max={100} value={paiementForm.pourcentageTranche}
+                <label className="block text-xs font-medium text-slate-700 mb-1">% Tranche</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={paiementForm.pourcentageTranche}
                   onChange={(e) => setPaiementForm({ ...paiementForm, pourcentageTranche: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Avance à déduire</label>
-                <input type="number" min={0} value={paiementForm.montantAvance}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Avance à déduire</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={paiementForm.montantAvance}
                   onChange={(e) => setPaiementForm({ ...paiementForm, montantAvance: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date paiement</label>
-                <input type="date" value={paiementForm.datePaiement}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Date paiement</label>
+                <input
+                  type="date"
+                  value={paiementForm.datePaiement}
                   onChange={(e) => setPaiementForm({ ...paiementForm, datePaiement: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Référence</label>
-                <input type="text" value={paiementForm.reference}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Référence</label>
+                <input
+                  type="text"
+                  value={paiementForm.reference}
                   onChange={(e) => setPaiementForm({ ...paiementForm, reference: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="Ex: PAY-2024-001"
+                />
               </div>
             </div>
 
-            {/* Preview */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
-              <p className="text-xs text-emerald-600 mb-1">Montant de cette tranche ({paiementForm.pourcentageTranche}%)</p>
-              <p className="text-3xl font-bold text-emerald-700">{paiementPreview.montantPaye.toLocaleString("fr-MG")} Ar</p>
-              {paiementPreview.resteAPayer > 0 && (
-                <p className="text-xs text-slate-500 mt-1">Reste à payer: {paiementPreview.resteAPayer.toLocaleString("fr-MG")} Ar</p>
-              )}
+              <p className="text-xs text-emerald-700 mb-1">Montant de cette tranche ({paiementForm.pourcentageTranche}%)</p>
+              <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{paiementPreview.montantPaye.toLocaleString("fr-MG")} Ar</p>
+              {paiementPreview.resteAPayer > 0 && <p className="text-xs text-slate-500 mt-1">Reste à payer: {paiementPreview.resteAPayer.toLocaleString()} Ar</p>}
             </div>
 
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowPaiementModal(false)}
-                className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Annuler</button>
-              <button onClick={handleSavePaiement}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
-                <CreditCard size={16} /> Enregistrer le paiement
+            <div className="flex justify-end gap-2 sm:gap-3">
+              <button onClick={() => setShowPaiementModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">
+                Annuler
+              </button>
+              <button onClick={handleSavePaiement} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+                <CreditCard size={16} /> Enregistrer paiement
               </button>
             </div>
           </div>
@@ -1256,52 +1619,144 @@ export default function HomePage() {
       </Modal>
 
       {/* Modal Fiche */}
-      <Modal isOpen={showFicheModal} onClose={() => setShowFicheModal(false)}
-        title="📄 Fiche Individuelle de Paiement" size="full">
-        {ficheData && <FicheIndividuelle data={ficheData} />}
+      <Modal isOpen={showFicheModal} onClose={() => setShowFicheModal(false)} title="📄 Fiche Individuelle de Paiement" size="full">
+        {ficheData && <FicheIndividuelle data={ficheData as any} />}
       </Modal>
 
-      {/* Modal Facultés */}
-      <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)}
-        title="🏛️ Gestion des Facultés / Parcours" size="2xl">
+      {/* Modal Facultés - conforme prompt.md avec Etablissement*, Domaine*, Mention* */}
+      <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)} title="🏛️ Gestion Facultés (Hiérarchie académique)" size="2xl">
         <div className="space-y-4">
-          <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Établissement *" value={facForm.etablissement}
-                onChange={(v) => setFacForm({ ...facForm, etablissement: v })} required />
-              <Input label="Mention" value={facForm.mention}
-                onChange={(v) => setFacForm({ ...facForm, mention: v })} />
-              <Input label="Parcours" value={facForm.parcours}
-                onChange={(v) => setFacForm({ ...facForm, parcours: v })} />
-              <Input label="Niveau" value={facForm.niveau}
-                onChange={(v) => setFacForm({ ...facForm, niveau: v })} />
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs">
+            <p className="font-semibold">Règles selon prompt.md:</p>
+            <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
+              <li>
+                Champs obligatoires: <strong>Établissement, Domaine, Mention</strong>
+              </li>
+              <li>Optionnels: Parcours, Niveau, Code</li>
+              <li>Vérification des doublons avant insertion</li>
+              <li>Saisie assistée (autocomplete) pour tous les champs</li>
+              <li>Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau</li>
+            </ul>
+          </div>
+
+          <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Établissement *</label>
+                <input
+                  value={facForm.etablissement}
+                  onChange={(e) => handleFacFieldChange("etablissement", e.target.value)}
+                  list="etablissement-list"
+                  required
+                  placeholder="Ex: Université de Toliara"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+                <datalist id="etablissement-list">
+                  {facSuggestions.etablissement?.map((s, i) => (
+                    <option key={i} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Domaine *</label>
+                <input
+                  value={facForm.domaine}
+                  onChange={(e) => handleFacFieldChange("domaine", e.target.value)}
+                  list="domaine-list"
+                  required
+                  placeholder="Ex: Sciences et Technologies"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+                <datalist id="domaine-list">
+                  {facSuggestions.domaine?.map((s, i) => (
+                    <option key={i} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Mention *</label>
+                <input
+                  value={facForm.mention}
+                  onChange={(e) => handleFacFieldChange("mention", e.target.value)}
+                  list="mention-list"
+                  required
+                  placeholder="Ex: Informatique"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+                <datalist id="mention-list">
+                  {facSuggestions.mention?.map((s, i) => (
+                    <option key={i} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (optionnel)</label>
+                <input
+                  value={facForm.parcours}
+                  onChange={(e) => handleFacFieldChange("parcours", e.target.value)}
+                  list="parcours-list"
+                  placeholder="Ex: Génie Logiciel"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+                <datalist id="parcours-list">
+                  {facSuggestions.parcours?.map((s, i) => (
+                    <option key={i} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Niveau (optionnel)</label>
+                <input
+                  value={facForm.niveau}
+                  onChange={(e) => handleFacFieldChange("niveau", e.target.value)}
+                  list="niveau-list"
+                  placeholder="Ex: L3, M1, M2"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+                <datalist id="niveau-list">
+                  {facSuggestions.niveau?.map((s, i) => (
+                    <option key={i} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Code (optionnel)</label>
+                <input
+                  value={facForm.code}
+                  onChange={(e) => setFacForm({ ...facForm, code: e.target.value })}
+                  placeholder="Ex: UT-ST-INFO-GL"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                />
+              </div>
             </div>
+            {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
             <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
-              <Plus size={16} /> Ajouter
+              <Plus size={16} /> Ajouter faculté
             </button>
           </form>
 
-          <div className="overflow-x-auto max-h-80">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto max-h-[300px] border rounded-lg">
+            <table className="w-full text-xs">
               <thead className="bg-slate-50 sticky top-0">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Établissement</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Mention</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Parcours</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Niveau</th>
-                  <th className="px-2 py-2"></th>
+                  {["Établissement", "Domaine", "Mention", "Parcours", "Niveau", "Code", ""].map((h) => (
+                    <th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {facultes.map(f => (
+                {facultes.map((f) => (
                   <tr key={f.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 text-xs font-medium">{f.etablissement}</td>
-                    <td className="px-3 py-2 text-xs">{f.mention || "—"}</td>
-                    <td className="px-3 py-2 text-xs">{f.parcours || "—"}</td>
-                    <td className="px-3 py-2 text-xs">{f.niveau || "—"}</td>
+                    <td className="px-2 py-2 font-medium truncate max-w-[150px]">{f.etablissement}</td>
+                    <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
+                    <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
+                    <td className="px-2 py-2">{f.parcours || "—"}</td>
+                    <td className="px-2 py-2">{f.niveau || "—"}</td>
+                    <td className="px-2 py-2 text-[10px] font-mono">{f.code || "—"}</td>
                     <td className="px-2 py-2 text-center">
-                      <button onClick={() => handleDeleteFac(f.id)}
-                        className="p-1 text-red-500 hover:bg-red-50 rounded">
+                      <button onClick={() => handleDeleteFac(f.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -1313,83 +1768,108 @@ export default function HomePage() {
         </div>
       </Modal>
 
-      {/* Modal Année / IRSA */}
-      <Modal isOpen={showAnneeModal} onClose={() => setShowAnneeModal(false)}
-        title="📅 Gestion des Années Universitaires" size="2xl">
-        <div className="space-y-6">
-          {/* Add form */}
-          <form onSubmit={handleSaveAnnee} className="bg-slate-50 rounded-lg p-4 space-y-3">
-            <h4 className="font-semibold text-slate-700">Nouvelle année</h4>
+      {/* Modal Années */}
+      <Modal isOpen={showAnneeModal} onClose={() => setShowAnneeModal(false)} title="📅 Gestion Années Universitaires (IRSA par année)" size="2xl">
+        <div className="space-y-5">
+          <form onSubmit={handleSaveAnnee} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
+            <h4 className="font-semibold text-slate-700 text-sm">Nouvelle année universitaire</h4>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Libellé *" value={anneeForm.libelle} placeholder="ex: 2026-2027"
-                onChange={(v) => setAnneeForm({ ...anneeForm, libelle: v })} required />
-              <Input label="Tranche" value={anneeForm.tranche}
-                onChange={(v) => setAnneeForm({ ...anneeForm, tranche: v })} />
-              <div className="flex items-center gap-3 col-span-2">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Libellé * (ex: 2024-2025)</label>
+                <input
+                  value={anneeForm.libelle}
+                  onChange={(e) => setAnneeForm({ ...anneeForm, libelle: e.target.value })}
+                  required
+                  placeholder="2026-2027"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Tranche</label>
+                <select
+                  value={anneeForm.tranche}
+                  onChange={(e) => setAnneeForm({ ...anneeForm, tranche: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option>Première tranche</option>
+                  <option>Deuxième tranche</option>
+                  <option>Troisième tranche</option>
+                </select>
+              </div>
+              <div className="col-span-2 flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={anneeForm.appliquerIRSA}
+                  <input
+                    type="checkbox"
+                    checked={anneeForm.appliquerIRSA}
                     onChange={(e) => setAnneeForm({ ...anneeForm, appliquerIRSA: e.target.checked })}
-                    className="rounded" />
+                    className="rounded"
+                  />
                   Appliquer IRSA
                 </label>
                 {anneeForm.appliquerIRSA && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-600">Taux:</span>
-                    <input type="number" min={0} max={100} value={anneeForm.tauxIRSA}
+                    <span className="text-xs text-slate-600">Taux IRSA:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={anneeForm.tauxIRSA}
                       onChange={(e) => setAnneeForm({ ...anneeForm, tauxIRSA: Number(e.target.value) })}
-                      className="w-20 px-2 py-1 border border-slate-300 rounded text-sm" />
-                    <span className="text-sm text-slate-600">%</span>
+                      className="w-20 px-2 py-1 border border-slate-300 rounded text-sm"
+                    />
+                    <span className="text-xs text-slate-600">%</span>
                   </div>
                 )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={anneeForm.active} onChange={(e) => setAnneeForm({ ...anneeForm, active: e.target.checked })} className="rounded" />
+                  Active
+                </label>
               </div>
-              <Input label="Plafond paiement (Ar)" value={anneeForm.plafondPaiement}
-                onChange={(v) => setAnneeForm({ ...anneeForm, plafondPaiement: v })} />
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Plafond paiement (Ar) optionnel</label>
+                <input
+                  value={anneeForm.plafondPaiement}
+                  onChange={(e) => setAnneeForm({ ...anneeForm, plafondPaiement: e.target.value })}
+                  placeholder="Ex: 5000000"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                />
+              </div>
             </div>
             <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-              <Plus size={16} /> Ajouter
+              <Plus size={16} /> Ajouter année
             </button>
           </form>
 
-          {/* List */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto border rounded-lg">
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Année</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Tranche</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">IRSA</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">Taux</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">Plafond</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">Active</th>
+                  {["Année", "Tranche", "IRSA", "Taux", "Plafond", "Active"].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {annees.map(a => (
+                {annees.map((a) => (
                   <tr key={a.id} className={`hover:bg-slate-50 ${a.active ? "bg-green-50" : ""}`}>
                     <td className="px-3 py-2 font-medium">{a.libelle}</td>
                     <td className="px-3 py-2 text-xs">{a.tranche}</td>
                     <td className="px-3 py-2 text-center">
                       <button
                         onClick={() => handleUpdateAnnee(a, "appliquerIRSA", !a.appliquerIRSA)}
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          a.appliquerIRSA ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
-                        }`}
+                        className={`px-2 py-1 rounded text-xs font-medium ${a.appliquerIRSA ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
                       >
                         {a.appliquerIRSA ? "Oui" : "Non"}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-center text-xs">
-                      {a.appliquerIRSA ? `${a.tauxIRSA}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs font-mono">
-                      {a.plafondPaiement ? Number(a.plafondPaiement).toLocaleString("fr-MG") : "—"}
-                    </td>
+                    <td className="px-3 py-2 text-center text-xs">{a.appliquerIRSA ? `${a.tauxIRSA}%` : "—"}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono">{a.plafondPaiement ? Number(a.plafondPaiement).toLocaleString() : "—"}</td>
                     <td className="px-3 py-2 text-center">
                       <button
                         onClick={() => handleUpdateAnnee(a, "active", !a.active)}
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          a.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"
-                        }`}
+                        className={`px-2 py-1 rounded text-xs font-medium ${a.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}`}
                       >
                         {a.active ? "✓ Active" : "Activer"}
                       </button>
@@ -1399,18 +1879,31 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+          <p className="text-xs text-slate-500">
+            Selon prompt.md: IRSA est configurable par année (activable/désactivable), la dernière année est sélectionnée par défaut au lancement, et un plafond étatique optionnel
+            peut être défini.
+          </p>
         </div>
       </Modal>
 
       {/* Modal Grades */}
-      <Modal isOpen={showGradeModal} onClose={() => setShowGradeModal(false)}
-        title="🎓 Gestion des Grades et Taux" size="lg">
+      <Modal isOpen={showGradeModal} onClose={() => setShowGradeModal(false)} title="🎓 Grades et Taux Horaires" size="lg">
         <div className="space-y-3">
-          {grades.map(g => (
-            <div key={g.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
+            <p className="font-semibold">Taux par défaut (prompt.md):</p>
+            <ul className="list-disc list-inside mt-1">
+              <li>A Assistant: 6 000 Ar/h</li>
+              <li>MC Maître de Conférences: 8 000 Ar/h</li>
+              <li>PR Professeur: 10 000 Ar/h</li>
+              <li>PRT Professeur Titulaire: 12 000 Ar/h</li>
+            </ul>
+          </div>
+          {grades.map((g) => (
+            <div key={g.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-50 rounded-lg border">
               <GradeBadge grade={g.code} />
               <div className="flex-1">
                 <p className="text-sm font-medium">{g.libelle}</p>
+                <p className="text-xs text-slate-500">{g.code}</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">Taux:</span>
@@ -1423,32 +1916,13 @@ export default function HomePage() {
                       fetch("/api/grades", {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ id: g.id, tauxHoraire: newVal, obligationService: g.obligationService }),
-                      }).then(() => loadGrades());
+                        body: JSON.stringify({ id: g.id, tauxHoraire: newVal }),
+                      }).then(() => loadGrades().then(() => loadEnseignants()));
                     }
                   }}
-                  className="w-24 px-2 py-1 border border-slate-300 rounded text-sm text-right"
+                  className="w-28 px-2 py-1.5 border border-slate-300 rounded text-sm text-right bg-white"
                 />
                 <span className="text-xs text-slate-500">Ar/h</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Oblig:</span>
-                <input
-                  type="number"
-                  defaultValue={g.obligationService}
-                  onBlur={(e) => {
-                    const newVal = Number(e.target.value);
-                    if (newVal !== g.obligationService) {
-                      fetch("/api/grades", {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ id: g.id, tauxHoraire: g.tauxHoraire, obligationService: newVal }),
-                      }).then(() => loadGrades());
-                    }
-                  }}
-                  className="w-16 px-2 py-1 border border-slate-300 rounded text-sm text-right"
-                />
-                <span className="text-xs text-slate-500">h</span>
               </div>
             </div>
           ))}
@@ -1458,13 +1932,9 @@ export default function HomePage() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// COMPONENTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Petits composants ─────────────────────────────────────────────────────────
 
-function StatCard({ icon, label, value, sub, color }: {
-  icon: React.ReactNode; label: string; value: string | number; sub: string; color: string;
-}) {
+function StatCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string | number; sub: string; color: string }) {
   const colors: Record<string, string> = {
     blue: "from-blue-500 to-blue-600",
     emerald: "from-emerald-500 to-emerald-600",
@@ -1474,33 +1944,15 @@ function StatCard({ icon, label, value, sub, color }: {
   };
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
-      <div className="p-4">
+      <div className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-slate-500 text-xs font-medium uppercase tracking-wider">{label}</span>
+          <span className="text-slate-500 text-[10px] sm:text-xs font-medium uppercase tracking-wider">{label}</span>
           <span className={`p-2 rounded-lg bg-gradient-to-br ${colors[color]} text-white`}>{icon}</span>
         </div>
-        <div className="text-2xl font-bold text-slate-900 mb-0.5">{value}</div>
-        <div className="text-xs text-slate-400">{sub}</div>
+        <div className="text-lg sm:text-2xl font-bold text-slate-900 mb-0.5 truncate">{value}</div>
+        <div className="text-[10px] sm:text-xs text-slate-400 truncate">{sub}</div>
       </div>
       <div className={`h-1 bg-gradient-to-r ${colors[color]}`} />
-    </div>
-  );
-}
-
-function Input({ label, value, onChange, required = false, placeholder = "", type = "text" }: {
-  label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; type?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-      />
     </div>
   );
 }
@@ -1515,132 +1967,215 @@ function NumInput({ label, value, onChange }: { label: string; value: number; on
         step={0.5}
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
-        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none"
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
       />
     </div>
   );
 }
 
-function FicheIndividuelle({ data }: { data: Record<string, unknown> }) {
+function FicheIndividuelle({ data }: { data: any }) {
   const d = data as {
     numeroEtat: string;
     annee: string;
     tranche: string;
-    enseignant: { nomPrenom: string; cin: string; statut: string; telephone: string; email: string; rib: string; banque: string; etablissementPrincipal: string; specialite: string };
+    enseignant: { nom: string; prenom: string | null; nomPrenom: string; cin: string | null; statut: string; telephone: string | null; email: string | null; rib: string | null; etablissementPrincipal: string | null; specialite: string | null };
     grade: { code: string; libelle: string; taux: number } | null;
-    detailsParFaculte: Record<string, { etablissement: string; mention: string; parcours: string; et: number; ed: number; ep: number; sout: number; rech: number }[]>;
-    totaux: { et: number; ed: number; ep: number; soutenance: number; recherche: number; hcBrut: number; obligation: number; exempte: boolean; hcNette: number; hcArrondi: number };
-    calculs: { taux: number; montantBrut: number; plafondApplique: number | null; appliquerIRSA: boolean; tauxIRSA: number; montantIRSA: number; montantNet: number; totalAvance: number; netAPayer: number; netEnLettres: string };
+    statut: string;
+    detailsParFaculte: Record<string, { etablissement: string; domaine: string; mention: string; parcours: string; et: number; ed: number; ep: number; sout: number; rech: number }[]>;
+    totaux: {
+      et: number;
+      ed: number;
+      ep: number;
+      soutenance: number;
+      recherche: number;
+      hcBrut: number;
+      obligation: number;
+      obligationSaisie: number;
+      exempte: boolean;
+      hcNette: number;
+      hcArrondi: number;
+    };
+    calculs: {
+      taux: number;
+      montantBrut: number;
+      plafondApplique: number | null;
+      appliquerIRSA: boolean;
+      tauxIRSA: number;
+      montantIRSA: number;
+      montantNet: number;
+      totalAvance: number;
+      netAPayer: number;
+      netEnLettres: string;
+    };
   };
 
   return (
     <div className="print:text-black">
       <div className="flex justify-end gap-3 mb-4 no-print">
-        <button onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800">
+        <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800">
           🖨️ Imprimer / PDF
+        </button>
+        <button
+          onClick={async () => {
+            const res = await fetch(`/api/export/excel?anneeId=&`);
+            // no-op
+          }}
+          className="px-4 py-2 border border-slate-300 rounded-lg text-sm"
+        >
+          Export CSV
         </button>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-4 text-sm">
-        {/* Header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-6 space-y-4 text-sm max-w-4xl mx-auto">
         <div className="text-center border-b border-slate-300 pb-4">
           <h2 className="text-lg font-bold uppercase">Fiche Individuelle de Paiement</h2>
           <h3 className="text-base font-semibold text-slate-700">Heures Complémentaires</h3>
-          <p className="text-sm text-slate-600">Année Universitaire: <strong>{d.annee}</strong> — {d.tranche}</p>
-          <p className="text-xs text-slate-500">État N° {d.numeroEtat}</p>
+          <p className="text-sm text-slate-600">
+            Année Universitaire: <strong>{d.annee}</strong> — {d.tranche}
+          </p>
+          <p className="text-xs text-slate-500">État N° {d.numeroEtat} – Grade & Statut historiques (table heures)</p>
         </div>
 
-        {/* Enseignant info */}
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><span className="text-slate-500">Nom et Prénoms:</span> <strong>{d.enseignant.nomPrenom}</strong></div>
-          <div><span className="text-slate-500">CIN:</span> {d.enseignant.cin || "—"}</div>
-          <div><span className="text-slate-500">Grade:</span> <strong>{d.grade?.code}</strong> ({d.grade?.libelle})</div>
-          <div><span className="text-slate-500">Statut:</span> {d.enseignant.statut}</div>
-          <div><span className="text-slate-500">Établissement:</span> {d.enseignant.etablissementPrincipal || "—"}</div>
-          <div><span className="text-slate-500">RIB:</span> {d.enseignant.rib || "—"}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="text-slate-500">Nom et Prénoms:</span> <strong>{d.enseignant.nomPrenom}</strong>
+            <span className="ml-2 text-xs text-slate-400">
+              (Nom: {d.enseignant.nom} – Prénom: {d.enseignant.prenom || "—"})
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">CIN:</span> {d.enseignant.cin || "—"}
+          </div>
+          <div>
+            <span className="text-slate-500">Grade (historique HC):</span> <strong>{d.grade?.code}</strong> ({d.grade?.libelle}) – {d.calculs.taux.toLocaleString()} Ar/h
+          </div>
+          <div>
+            <span className="text-slate-500">Statut (historique HC):</span> {d.statut}
+          </div>
+          <div>
+            <span className="text-slate-500">Établissement:</span> {d.enseignant.etablissementPrincipal || "—"}
+          </div>
+          <div>
+            <span className="text-slate-500">RIB:</span> {d.enseignant.rib || "—"}
+          </div>
         </div>
 
-        {/* Details par faculté */}
-        <div className="space-y-2">
-          <h4 className="font-semibold border-b pb-1">Détail des heures par établissement</h4>
+        <div className="space-y-3">
+          <h4 className="font-semibold border-b pb-1">Détail des heures par établissement (avec Domaine/Mention)</h4>
           {Object.entries(d.detailsParFaculte).map(([etab, rows]) => (
-            <div key={etab} className="mb-2">
-              <p className="font-medium text-slate-700">{etab}</p>
-              <table className="w-full text-xs border border-slate-200 mt-1">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-2 py-1 border text-left">Parcours</th>
-                    <th className="px-2 py-1 border text-center">ET</th>
-                    <th className="px-2 py-1 border text-center">ED</th>
-                    <th className="px-2 py-1 border text-center">EP</th>
-                    <th className="px-2 py-1 border text-center">Sout.</th>
-                    <th className="px-2 py-1 border text-center">Rech.</th>
-                    <th className="px-2 py-1 border text-center font-bold">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => {
-                    const tot = r.et + r.ed + r.ep + r.sout + r.rech;
-                    return (
-                      <tr key={i}>
-                        <td className="px-2 py-1 border">{r.parcours || r.mention || "—"}</td>
-                        <td className="px-2 py-1 border text-center">{r.et}</td>
-                        <td className="px-2 py-1 border text-center">{r.ed}</td>
-                        <td className="px-2 py-1 border text-center">{r.ep}</td>
-                        <td className="px-2 py-1 border text-center">{r.sout}</td>
-                        <td className="px-2 py-1 border text-center">{r.rech}</td>
-                        <td className="px-2 py-1 border text-center font-bold">{tot}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div key={etab} className="mb-3">
+              <p className="font-medium text-slate-700 text-sm">{etab}</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border border-slate-200 mt-1">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-2 py-1 border text-left">Domaine / Mention / Parcours</th>
+                      <th className="px-2 py-1 border text-center">ET</th>
+                      <th className="px-2 py-1 border text-center">ED</th>
+                      <th className="px-2 py-1 border text-center">EP</th>
+                      <th className="px-2 py-1 border text-center">Sout.</th>
+                      <th className="px-2 py-1 border text-center">Rech.</th>
+                      <th className="px-2 py-1 border text-center font-bold">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r: any, i: number) => {
+                      const tot = r.et + r.ed + r.ep + r.sout + r.rech;
+                      return (
+                        <tr key={i}>
+                          <td className="px-2 py-1 border text-[11px]">
+                            {r.domaine && <span className="text-slate-500">{r.domaine} / </span>}
+                            {r.mention} {r.parcours ? `- ${r.parcours}` : ""}
+                          </td>
+                          <td className="px-2 py-1 border text-center">{r.et}</td>
+                          <td className="px-2 py-1 border text-center">{r.ed}</td>
+                          <td className="px-2 py-1 border text-center">{r.ep}</td>
+                          <td className="px-2 py-1 border text-center">{r.sout}</td>
+                          <td className="px-2 py-1 border text-center">{r.rech}</td>
+                          <td className="px-2 py-1 border text-center font-bold">{tot}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Calculs */}
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <tbody>
-              <tr className="border-b"><td className="px-3 py-2">Total HC Brut</td><td className="px-3 py-2 text-right font-bold">{d.totaux.hcBrut.toFixed(2)} h</td></tr>
-              <tr className="border-b"><td className="px-3 py-2">Obligation de service</td><td className="px-3 py-2 text-right">{d.totaux.exempte ? "Exempté" : `${d.totaux.obligation} h`}</td></tr>
-              <tr className="border-b bg-blue-50"><td className="px-3 py-2 font-bold">HC Nette (arrondie)</td><td className="px-3 py-2 text-right font-bold text-blue-700">{d.totaux.hcArrondi} h</td></tr>
-              <tr className="border-b"><td className="px-3 py-2">Taux horaire ({d.grade?.code})</td><td className="px-3 py-2 text-right">{d.calculs.taux.toLocaleString("fr-MG")} Ar</td></tr>
-              <tr className="border-b bg-amber-50"><td className="px-3 py-2 font-bold">Montant Brut</td><td className="px-3 py-2 text-right font-bold text-amber-700">{d.calculs.montantBrut.toLocaleString("fr-MG")} Ar</td></tr>
+              <tr className="border-b">
+                <td className="px-3 py-2">Total HC Brut (ET+ED+EP+Sout+Rech)</td>
+                <td className="px-3 py-2 text-right font-bold">{d.totaux.hcBrut.toFixed(2)} h</td>
+              </tr>
+              <tr className="border-b">
+                <td className="px-3 py-2">Obligation saisie (défaut 125h, 0 vacataire)</td>
+                <td className="px-3 py-2 text-right">{d.totaux.exempte || d.totaux.obligation === 0 ? "0h (Vacataire/Exempté)" : `${d.totaux.obligation} h`}</td>
+              </tr>
+              <tr className="border-b bg-blue-50">
+                <td className="px-3 py-2 font-bold">HC Nette (max(0, Brut - Oblig) si Permanent)</td>
+                <td className="px-3 py-2 text-right font-bold text-blue-700">
+                  {d.totaux.hcNette.toFixed(2)} h → Arrondie {d.totaux.hcArrondi} h
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="px-3 py-2">Taux horaire ({d.grade?.code})</td>
+                <td className="px-3 py-2 text-right">{d.calculs.taux.toLocaleString("fr-MG")} Ar</td>
+              </tr>
+              <tr className="border-b bg-amber-50">
+                <td className="px-3 py-2 font-bold">Montant Brut (HC arrondie × Taux, plafond si défini)</td>
+                <td className="px-3 py-2 text-right font-bold text-amber-700">{d.calculs.montantBrut.toLocaleString("fr-MG")} Ar</td>
+              </tr>
               {d.calculs.plafondApplique && (
-                <tr className="border-b"><td className="px-3 py-2 text-orange-600">Plafond appliqué</td><td className="px-3 py-2 text-right text-orange-600">{d.calculs.plafondApplique.toLocaleString("fr-MG")} Ar</td></tr>
+                <tr className="border-b">
+                  <td className="px-3 py-2 text-orange-600">Plafond étatique appliqué</td>
+                  <td className="px-3 py-2 text-right text-orange-600">{d.calculs.plafondApplique.toLocaleString("fr-MG")} Ar</td>
+                </tr>
               )}
               {d.calculs.appliquerIRSA ? (
-                <tr className="border-b"><td className="px-3 py-2 text-red-600">IRSA ({d.calculs.tauxIRSA}%)</td><td className="px-3 py-2 text-right text-red-600">-{d.calculs.montantIRSA.toLocaleString("fr-MG")} Ar</td></tr>
+                <tr className="border-b">
+                  <td className="px-3 py-2 text-red-600">IRSA ({d.calculs.tauxIRSA}%) = Brut × tauxIRSA/100</td>
+                  <td className="px-3 py-2 text-right text-red-600">-{d.calculs.montantIRSA.toLocaleString("fr-MG")} Ar</td>
+                </tr>
               ) : (
-                <tr className="border-b"><td className="px-3 py-2 text-green-600">IRSA</td><td className="px-3 py-2 text-right text-green-600">Non appliqué</td></tr>
+                <tr className="border-b">
+                  <td className="px-3 py-2 text-green-600">IRSA (désactivé pour cette année)</td>
+                  <td className="px-3 py-2 text-right text-green-600">0 Ar</td>
+                </tr>
               )}
-              <tr className="border-b"><td className="px-3 py-2">Montant Net</td><td className="px-3 py-2 text-right">{d.calculs.montantNet.toLocaleString("fr-MG")} Ar</td></tr>
+              <tr className="border-b">
+                <td className="px-3 py-2">Montant Net (Brut - IRSA)</td>
+                <td className="px-3 py-2 text-right">{d.calculs.montantNet.toLocaleString("fr-MG")} Ar</td>
+              </tr>
               {d.calculs.totalAvance > 0 && (
-                <tr className="border-b"><td className="px-3 py-2">Avance déduite</td><td className="px-3 py-2 text-right">-{d.calculs.totalAvance.toLocaleString("fr-MG")} Ar</td></tr>
+                <tr className="border-b">
+                  <td className="px-3 py-2">Avance déduite</td>
+                  <td className="px-3 py-2 text-right">-{d.calculs.totalAvance.toLocaleString("fr-MG")} Ar</td>
+                </tr>
               )}
-              <tr className="bg-emerald-50"><td className="px-3 py-2 font-bold text-lg">NET À PAYER</td><td className="px-3 py-2 text-right font-bold text-lg text-emerald-700">{d.calculs.netAPayer.toLocaleString("fr-MG")} Ar</td></tr>
+              <tr className="bg-emerald-50">
+                <td className="px-3 py-2 font-bold text-base">NET À PAYER (Net - Avances)</td>
+                <td className="px-3 py-2 text-right font-bold text-base text-emerald-700">{d.calculs.netAPayer.toLocaleString("fr-MG")} Ar</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Montant en lettres */}
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
           <p className="text-xs text-slate-500">Montant net en toutes lettres:</p>
-          <p className="font-bold italic">{d.calculs.netEnLettres}</p>
+          <p className="font-bold italic text-sm">{d.calculs.netEnLettres}</p>
         </div>
 
-        {/* Signatures */}
         <div className="grid grid-cols-2 gap-8 mt-8 pt-4">
           <div className="text-center">
-            <p className="font-semibold mb-16">L&apos;intéressé(e)</p>
-            <div className="border-t border-slate-400 pt-1">Signature</div>
+            <p className="font-semibold mb-16 text-xs">L&apos;intéressé(e) - Signature, N° CIN + date/lieu délivrance</p>
+            <div className="border-t border-slate-400 pt-1 text-xs">Signature</div>
           </div>
           <div className="text-center">
-            <p className="font-semibold mb-16">Le Responsable</p>
-            <div className="border-t border-slate-400 pt-1">Signature et cachet</div>
+            <p className="font-semibold mb-16 text-xs">Le Responsable - Cachet</p>
+            <div className="border-t border-slate-400 pt-1 text-xs">Signature et cachet</div>
           </div>
         </div>
       </div>

@@ -11,7 +11,7 @@ export function GradeBadge({ grade }: { grade: string }) {
     <span
       className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${colors[grade] || "bg-gray-100 text-gray-700 border-gray-300"}`}
     >
-      {grade}
+      {grade || "—"}
     </span>
   );
 }
@@ -21,13 +21,11 @@ export function StatutBadge({ statut }: { statut: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${
-        isPerm
-          ? "bg-purple-50 text-purple-700 border border-purple-200"
-          : "bg-orange-50 text-orange-700 border border-orange-200"
+        isPerm ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-orange-50 text-orange-700 border border-orange-200"
       }`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${isPerm ? "bg-purple-500" : "bg-orange-500"}`} />
-      {statut}
+      {statut || "—"}
     </span>
   );
 }

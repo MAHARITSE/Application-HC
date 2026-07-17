@@ -1,138 +1,183 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { enseignants } from "@/db/schema";
-import { desc } from "drizzle-orm";
-import ExcelJS from "exceljs";
-import {
-  TAUX_PAR_GRADE,
-  calculerHC,
-  calculerHeuresAPayer,
-  calculerMontantBrut,
-  calculerISRA,
-  calculerNetAPayer,
-} from "@/lib/constants";
+import { enseignants, heures, grades, facultes, paiements, annees } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { calcHC, calcHCNette, calcMontantBrut, calcIRSA } from "@/lib/metier";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await db
-      .select()
-      .from(enseignants)
-      .orderBy(desc(enseignants.updatedAt));
+    const { searchParams } = new URL(request.url);
+    const anneeIdStr = searchParams.get("anneeId");
+    const anneeId = anneeIdStr ? Number(anneeIdStr) : null;
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "HC Enseignants";
-    workbook.created = new Date();
+    let heuresData;
+    let annee = null;
 
-    const sheet = workbook.addWorksheet("Enseignants", {
-      headerFooter: {
-        firstHeader: "Liste des Enseignants - Heures Complémentaires",
-      },
-    });
+    if (anneeId) {
+      const [a] = await db.select().from(annees).where(eq(annees.id, anneeId));
+      annee = a;
+      heuresData = await db
+        .select({
+          heure: heures,
+          enseignant: enseignants,
+          grade: grades,
+          faculte: facultes,
+        })
+        .from(heures)
+        .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
+        .leftJoin(grades, eq(heures.gradeId, grades.id))
+        .leftJoin(facultes, eq(heures.faculteId, facultes.id))
+        .where(eq(heures.anneeId, anneeId));
+    } else {
+      heuresData = await db
+        .select({
+          heure: heures,
+          enseignant: enseignants,
+          grade: grades,
+          faculte: facultes,
+        })
+        .from(heures)
+        .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
+        .leftJoin(grades, eq(heures.gradeId, grades.id))
+        .leftJoin(facultes, eq(heures.faculteId, facultes.id));
+    }
 
-    // Define columns
-    sheet.columns = [
-      { header: "N°", key: "num", width: 5 },
-      { header: "Nom", key: "nom", width: 18 },
-      { header: "Prénoms", key: "prenoms", width: 22 },
-      { header: "Grade", key: "grade", width: 8 },
-      { header: "Établissement", key: "etablissement", width: 22 },
-      { header: "Statut", key: "statut", width: 12 },
-      { header: "ET", key: "et", width: 8 },
-      { header: "ED", key: "ed", width: 8 },
-      { header: "EP", key: "ep", width: 8 },
-      { header: "Soutenance", key: "soutenance", width: 12 },
-      { header: "Recherche", key: "recherche", width: 10 },
-      { header: "HC Brut", key: "hcBrut", width: 10 },
-      { header: "Heures à payer", key: "heuresPayer", width: 14 },
-      { header: "Taux (Ar)", key: "taux", width: 12 },
-      { header: "Montant Brut (Ar)", key: "montantBrut", width: 18 },
-      { header: "ISRA (Ar)", key: "isra", width: 14 },
-      { header: "Avance (Ar)", key: "avance", width: 14 },
-      { header: "Net à Payer (Ar)", key: "netPayer", width: 18 },
-      { header: "RIB", key: "rib", width: 20 },
-    ];
+    const paiementsData = anneeId
+      ? await db.select().from(paiements).where(eq(paiements.anneeId, anneeId))
+      : await db.select().from(paiements);
 
-    // Style header row
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    headerRow.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF1E3A5F" },
-    };
-    headerRow.alignment = { horizontal: "center", vertical: "middle" };
-    headerRow.height = 25;
+    // Agrégation
+    const map = new Map<number, any>();
+    for (const row of heuresData) {
+      const eid = row.enseignant.id;
+      if (!map.has(eid)) {
+        map.set(eid, {
+          enseignant: row.enseignant,
+          totalET: 0,
+          totalED: 0,
+          totalEP: 0,
+          totalSout: 0,
+          totalRech: 0,
+          dernierGrade: null,
+          dernierStatut: "Vacataire",
+          derniereObligation: 125,
+          etabSet: new Set<string>(),
+        });
+      }
+      const cur = map.get(eid);
+      cur.totalET += row.heure.heuresET || 0;
+      cur.totalED += row.heure.heuresED || 0;
+      cur.totalEP += row.heure.heuresEP || 0;
+      cur.totalSout += row.heure.heuresSoutenance || 0;
+      cur.totalRech += row.heure.heuresRecherche || 0;
+      if (row.grade) cur.dernierGrade = row.grade;
+      if (row.heure.statut) cur.dernierStatut = row.heure.statut;
+      if (row.heure.obligation != null) cur.derniereObligation = row.heure.obligation;
+      if (row.faculte?.etablissement) cur.etabSet.add(row.faculte.etablissement);
+    }
 
-    // Add data
-    data.forEach((e, index) => {
-      const et = parseFloat(e.heuresET ?? "0");
-      const ed = parseFloat(e.heuresED ?? "0");
-      const ep = parseFloat(e.heuresEP ?? "0");
-      const soutenance = parseFloat(e.heuresSoutenance ?? "0");
-      const recherche = parseFloat(e.heuresRecherche ?? "0");
-      const avance = parseFloat(e.avance ?? "0");
-
-      const hcBrut = calculerHC(et, ed, ep, soutenance, recherche);
-      const heuresPayer = calculerHeuresAPayer(hcBrut, e.statut);
-      const taux = TAUX_PAR_GRADE[e.grade] || 0;
-      const montantBrut = calculerMontantBrut(heuresPayer, e.grade);
-      const isra = calculerISRA(montantBrut, e.statut);
-      const netPayer = calculerNetAPayer(montantBrut, isra, avance);
-
-      const row = sheet.addRow({
-        num: index + 1,
-        nom: e.nom,
-        prenoms: e.prenoms,
-        grade: e.grade,
-        etablissement: e.etablissement,
-        statut: e.statut,
-        et,
-        ed,
-        ep,
-        soutenance,
-        recherche,
-        hcBrut,
-        heuresPayer,
+    const rows = Array.from(map.values()).map((entry, idx) => {
+      const hc = calcHC(entry.totalET, entry.totalED, entry.totalEP, entry.totalSout, entry.totalRech);
+      const { hcNette, obligationAppliquee } = calcHCNette(hc, entry.derniereObligation, entry.dernierStatut);
+      const hcArr = Math.floor(hcNette);
+      const taux = entry.dernierGrade?.tauxHoraire || 0;
+      let montantBrut = calcMontantBrut(hcArr, taux, annee?.plafondPaiement ? Number(annee.plafondPaiement) : null);
+      const irsa = calcIRSA(montantBrut, annee?.tauxIRSA || 20, annee?.appliquerIRSA ?? true);
+      const montantNet = montantBrut - irsa;
+      const totalAvance = paiementsData.filter((p) => p.enseignantId === entry.enseignant.id).reduce((s, p) => s + (p.montantAvance || 0), 0);
+      return {
+        numero: idx + 1,
+        nom: entry.enseignant.nom,
+        prenom: entry.enseignant.prenom || "",
+        nomPrenom: `${entry.enseignant.nom} ${entry.enseignant.prenom || ""}`.trim(),
+        grade: entry.dernierGrade?.code || "",
+        etablissement: entry.enseignant.etablissementPrincipal || Array.from(entry.etabSet).join(", "),
+        statut: entry.dernierStatut,
+        et: entry.totalET,
+        ed: entry.totalED,
+        ep: entry.totalEP,
+        soutenance: entry.totalSout,
+        recherche: entry.totalRech,
+        hcBrut: hc,
+        obligation: obligationAppliquee,
+        hcNette,
+        hcArr,
         taux,
         montantBrut,
-        isra,
-        avance,
-        netPayer,
-        rib: e.rib,
-      });
-
-      row.alignment = { horizontal: "center", vertical: "middle" };
-      
-      // Alternate row colors
-      if (index % 2 === 0) {
-        row.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFF0F4F8" },
-        };
-      }
+        irsa,
+        avance: totalAvance,
+        net: montantNet - totalAvance,
+        rib: entry.enseignant.rib || "",
+      };
     });
 
-    // Auto-filter
-    sheet.autoFilter = {
-      from: "A1",
-      to: `S${data.length + 1}`,
-    };
+    // On retourne JSON pour l'instant, l'export Excel sera fait côté front via lib
+    // Ou on peut générer un CSV simple
+    const csvHeader = [
+      "N°",
+      "Nom",
+      "Prénom",
+      "Nom et Prénoms",
+      "Grade",
+      "Statut",
+      "Établissement",
+      "ET",
+      "ED",
+      "EP",
+      "Soutenance",
+      "Recherche",
+      "HC Brut",
+      "Obligation",
+      "HC Nette",
+      "HC Arrondie",
+      "Taux",
+      "Montant Brut",
+      "IRSA",
+      "Avance",
+      "Net à Payer",
+      "RIB",
+    ].join(";");
 
-    const buffer = await workbook.xlsx.writeBuffer();
+    const csvRows = rows
+      .map((r) =>
+        [
+          r.numero,
+          `"${r.nom}"`,
+          `"${r.prenom}"`,
+          `"${r.nomPrenom}"`,
+          r.grade,
+          r.statut,
+          `"${r.etablissement}"`,
+          r.et,
+          r.ed,
+          r.ep,
+          r.soutenance,
+          r.recherche,
+          r.hcBrut,
+          r.obligation,
+          r.hcNette,
+          r.hcArr,
+          r.taux,
+          r.montantBrut,
+          r.irsa,
+          r.avance,
+          r.net,
+          `"${r.rib}"`,
+        ].join(";")
+      )
+      .join("\n");
 
-    return new NextResponse(buffer, {
+    const csv = `${csvHeader}\n${csvRows}`;
+
+    return new NextResponse(csv, {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="enseignants_hc_${new Date().toISOString().slice(0, 10)}.xlsx"`,
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename=\"hc_export_${annee?.libelle || "all"}_${new Date().toISOString().slice(0, 10)}.csv\"`,
       },
     });
-  } catch (error) {
-    console.error("Error exporting Excel:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de l'exportation Excel" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("export excel error", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

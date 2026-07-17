@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { sql } from "drizzle-orm";
-import { calcHC, calcHCNette, TAUX_GRADE } from "@/lib/metier";
+import { enseignants, heures, grades, facultes, annees, paiements } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { calcHC, calcHCNette, calcMontantBrut, calcIRSA } from "@/lib/metier";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -10,76 +11,103 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "anneeId requis" }, { status: 400 });
   }
 
-  const anneeRes = await db.execute(sql`
-    SELECT * FROM annees_universitaires WHERE id = ${anneeId} LIMIT 1
-  `);
-  const annee = anneeRes.rows[0] as Record<string, unknown>;
+  const [annee] = await db.select().from(annees).where(eq(annees.id, anneeId));
+  const heuresData = await db
+    .select({
+      heure: heures,
+      enseignant: enseignants,
+      grade: grades,
+      faculte: facultes,
+    })
+    .from(heures)
+    .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
+    .leftJoin(grades, eq(heures.gradeId, grades.id))
+    .leftJoin(facultes, eq(heures.faculteId, facultes.id))
+    .where(eq(heures.anneeId, anneeId));
 
-  const rows = await db.execute(sql`
-    SELECT
-      e.id, e.nom_prenom, e.cin, e.statut, e.rib, e.specialite,
-      e.etablissement_principal, e.telephone, e.email,
-      g.code AS grade_code, g.taux_horaire, g.obligation_service,
-      fp.etablissement AS fac_etab, fp.mention,
-      COALESCE(SUM(h.et),0)         AS total_et,
-      COALESCE(SUM(h.ed),0)         AS total_ed,
-      COALESCE(SUM(h.ep),0)         AS total_ep,
-      COALESCE(SUM(h.soutenance),0) AS total_soutenance,
-      COALESCE(SUM(h.recherche),0)  AS total_recherche,
-      COALESCE(SUM(h.avance),0)     AS total_avance,
-      h.niveau
-    FROM enseignants e
-    LEFT JOIN grades_taux g ON e.grade_id = g.id
-    LEFT JOIN heures_enseignement h ON h.enseignant_id = e.id AND h.annee_id = ${anneeId}
-    LEFT JOIN facultes_parcours fp ON h.faculte_parcours_id = fp.id
-    GROUP BY e.id, g.id, fp.id, h.niveau
-    ORDER BY e.statut, e.nom_prenom
-  `);
+  const paiementsData = await db.select().from(paiements).where(eq(paiements.anneeId, anneeId));
 
-  // Enrichir avec les calculs
-  const data = (rows.rows as Record<string, unknown>[]).map((r, idx) => {
-    const grade   = (r.grade_code as string)  || "A";
-    const statut  = (r.statut as string)      || "Vacataire";
-    const taux    = TAUX_GRADE[grade]         ?? 0;
-    const hc      = calcHC(
-      Number(r.total_et), Number(r.total_ed), Number(r.total_ep),
-      Number(r.total_soutenance), Number(r.total_recherche)
-    );
-    const { hcNette, obligation } = calcHCNette(hc, grade, statut);
-    const hcArr   = Math.floor(hcNette);
-    const montant = hcArr * taux;
-    const avance  = Number(r.total_avance) || 0;
+  // Aggregation par enseignant
+  const map = new Map<number, any>();
+
+  for (const row of heuresData) {
+    const eid = row.enseignant.id;
+    if (!map.has(eid)) {
+      map.set(eid, {
+        enseignant: row.enseignant,
+        totalET: 0,
+        totalED: 0,
+        totalEP: 0,
+        totalSout: 0,
+        totalRech: 0,
+        dernierGrade: null,
+        dernierStatut: "Vacataire",
+        derniereObligation: 125,
+        facultes: new Set<string>(),
+      });
+    }
+    const cur = map.get(eid);
+    cur.totalET += row.heure.heuresET || 0;
+    cur.totalED += row.heure.heuresED || 0;
+    cur.totalEP += row.heure.heuresEP || 0;
+    cur.totalSout += row.heure.heuresSoutenance || 0;
+    cur.totalRech += row.heure.heuresRecherche || 0;
+    if (row.grade) cur.dernierGrade = row.grade;
+    if (row.heure.statut) cur.dernierStatut = row.heure.statut;
+    if (row.heure.obligation != null) cur.derniereObligation = row.heure.obligation;
+    if (row.faculte?.etablissement) cur.facultes.add(row.faculte.etablissement);
+  }
+
+  const data = Array.from(map.values()).map((entry, idx) => {
+    const hc = calcHC(entry.totalET, entry.totalED, entry.totalEP, entry.totalSout, entry.totalRech);
+    const { hcNette } = calcHCNette(hc, entry.derniereObligation, entry.dernierStatut);
+    const hcArr = Math.floor(hcNette);
+    const taux = entry.dernierGrade?.tauxHoraire || 0;
+    let montantBrut = calcMontantBrut(hcArr, taux);
+    if (annee?.plafondPaiement && montantBrut > Number(annee.plafondPaiement)) {
+      montantBrut = Number(annee.plafondPaiement);
+    }
+    const irsa = calcIRSA(montantBrut, annee?.tauxIRSA || 20, annee?.appliquerIRSA ?? true);
+    const montantNet = montantBrut - irsa;
+    const totalAvance = paiementsData.filter((p) => p.enseignantId === entry.enseignant.id).reduce((s, p) => s + (p.montantAvance || 0), 0);
 
     return {
       numero: idx + 1,
-      nomPrenom: r.nom_prenom,
-      cin: r.cin,
-      statut,
-      grade,
-      specialite: r.specialite,
-      etablissement: r.etablissement_principal || r.fac_etab,
-      mention: r.mention,
-      niveau: r.niveau,
-      et: Number(r.total_et),
-      ed: Number(r.total_ed),
-      ep: Number(r.total_ep),
-      soutenance: Number(r.total_soutenance),
-      recherche: Number(r.total_recherche),
-      hcBrut: hc,
-      obligation,
-      hcConverties: hcArr,
+      id: entry.enseignant.id,
+      nom: entry.enseignant.nom,
+      prenom: entry.enseignant.prenom,
+      nomPrenom: `${entry.enseignant.nom} ${entry.enseignant.prenom || ""}`.trim(),
+      cin: entry.enseignant.cin,
+      statut: entry.dernierStatut,
+      grade: entry.dernierGrade?.code || "",
+      gradeLibelle: entry.dernierGrade?.libelle || "",
       taux,
-      montant,
-      avance,
-      netPayer: montant - avance,
-      telephone: r.telephone,
-      email: r.email,
-      rib: r.rib,
+      etablissement: entry.enseignant.etablissementPrincipal || Array.from(entry.facultes).join(", "),
+      et: entry.totalET,
+      ed: entry.totalED,
+      ep: entry.totalEP,
+      soutenance: entry.totalSout,
+      recherche: entry.totalRech,
+      hcBrut: hc,
+      obligation: entry.dernierStatut === "Permanent" ? entry.derniereObligation : 0,
+      hcNette,
+      hcArrondi: hcArr,
+      montantBrut,
+      irsa,
+      montantNet,
+      avance: totalAvance,
+      netPayer: montantNet - totalAvance,
+      rib: entry.enseignant.rib,
+      telephone: entry.enseignant.telephone,
+      email: entry.enseignant.email,
     };
   });
 
   return NextResponse.json({
     annee: annee?.libelle || "",
+    tranche: annee?.tranche || "",
+    appliquerIRSA: annee?.appliquerIRSA,
+    tauxIRSA: annee?.tauxIRSA,
     data,
   });
 }
