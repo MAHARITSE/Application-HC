@@ -53,6 +53,7 @@ export interface Annee {
   appliquerIRSA: boolean;
   tauxIRSA: number;
   plafondPaiement: string | null;
+  formuleHC?: string;
   createdAt?: string;
 }
 
@@ -222,6 +223,15 @@ export function createFaculte(data: Omit<Faculte, "id">): Faculte {
   list.push(newItem);
   saveFacultes(list);
   return newItem;
+}
+
+export function updateFaculte(id: number, data: Partial<Faculte>): Faculte | null {
+  const list = getFacultes();
+  const idx = list.findIndex((x) => x.id === id);
+  if (idx === -1) return null;
+  list[idx] = { ...list[idx], ...data };
+  saveFacultes(list);
+  return list[idx];
 }
 
 export function deleteFaculte(id: number) {

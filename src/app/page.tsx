@@ -24,7 +24,7 @@ import {
   CreditCard,
   Wallet,
 } from "lucide-react";
-import { calcHC, calcHCNette, calcMontantBrut, calcIRSA, formatAriary } from "@/lib/metier";
+import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, formatAriary, DEFAULT_HC_FORMULA } from "@/lib/metier";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Annee {
@@ -35,6 +35,7 @@ interface Annee {
   appliquerIRSA: boolean;
   tauxIRSA: number;
   plafondPaiement: string | null;
+  formuleHC?: string;
 }
 interface Grade {
   id: number;
@@ -149,6 +150,7 @@ export default function HomePage() {
   const [ficheData, setFicheData] = useState<Record<string, unknown> | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [allEnsSearch, setAllEnsSearch] = useState("");
+  const [returnToAllEnsAfterEdit, setReturnToAllEnsAfterEdit] = useState(false);
 
   // Recherche enseignant pour heures (autocomplete)
   const [ensSearchQuery, setEnsSearchQuery] = useState("");
@@ -192,6 +194,7 @@ export default function HomePage() {
     niveau: "",
     code: "",
   });
+  const [editingFacId, setEditingFacId] = useState<number | null>(null);
   const [facSuggestions, setFacSuggestions] = useState<Record<string, string[]>>({});
   const [facError, setFacError] = useState("");
 
@@ -202,7 +205,9 @@ export default function HomePage() {
     appliquerIRSA: true,
     tauxIRSA: 20,
     plafondPaiement: "",
+    formuleHC: DEFAULT_HC_FORMULA,
   });
+  const [editingAnneeId, setEditingAnneeId] = useState<number | null>(null);
 
   const [paiementForm, setPaiementForm] = useState({
     pourcentageTranche: 100,
@@ -313,10 +318,10 @@ export default function HomePage() {
   // ── Calcul d'une ligne tableau principal ────────────────────────────────────
   const calcRow = useCallback(
     (e: EnseignantRow) => {
-      const hcBrut = calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche);
+      const hcBrut = calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche, selectedAnnee?.formuleHC || DEFAULT_HC_FORMULA);
       const obligation = e.obligation ?? (e.statut === "Permanent" ? 125 : 0);
       const { hcNette } = calcHCNette(hcBrut, obligation, e.statut);
-      const hcArr = Math.floor(hcNette);
+      const hcArr = calcHCArrondie(hcNette);
       const taux = e.gradeTaux || 0;
       let montantBrut = calcMontantBrut(hcArr, taux);
       if (selectedAnnee?.plafondPaiement && montantBrut > Number(selectedAnnee.plafondPaiement)) {
@@ -359,10 +364,10 @@ export default function HomePage() {
       total: filtered.length,
       perm: filtered.filter((e) => e.statut === "Permanent").length,
       vacat: filtered.filter((e) => e.statut === "Vacataire").length,
-      totalHeures: filtered.reduce((sum, e) => sum + calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche), 0),
+      totalHeures: filtered.reduce((sum, e) => sum + calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche, selectedAnnee?.formuleHC || DEFAULT_HC_FORMULA), 0),
       montant: filtered.reduce((sum, e) => sum + calcRow(e).net, 0),
     }),
-    [filtered, calcRow]
+    [filtered, calcRow, selectedAnnee]
   );
 
   // ── Handlers Enseignant Base (sans grade/statut) ───────────────────────────
@@ -372,6 +377,10 @@ export default function HomePage() {
   };
 
   const handleEditEns = (ens: EnseignantBase | EnseignantRow) => {
+    if (showAllEnsModal) {
+      setShowAllEnsModal(false);
+      setReturnToAllEnsAfterEdit(true);
+    }
     setEditEns({
       id: ens.id,
       nom: (ens as any).nom || ens.nomPrenom.split(" ")[0],
@@ -411,6 +420,10 @@ export default function HomePage() {
       setShowEnsModal(false);
       await loadEnseignants();
       await loadAllEnseignants();
+      if (returnToAllEnsAfterEdit) {
+        setShowAllEnsModal(true);
+        setReturnToAllEnsAfterEdit(false);
+      }
 
       if (returnToHeuresAfterCreate && newEnseignant) {
         const mapped: EnseignantBase = {
@@ -482,10 +495,20 @@ export default function HomePage() {
     setShowEnsModal(true);
   };
 
+  const buildHeuresMissingMessage = (form: { gradeId: string; faculteId: string; heuresET: number; heuresED: number; heuresEP: number; heuresSoutenance: number; heuresRecherche: number }) => {
+    const missing: string[] = [];
+    if (!form.gradeId) missing.push("Grade * (au moment de la saisie)");
+    if (!form.faculteId) missing.push("Faculté / Parcours (saisie assistée)");
+    const total = Number(form.heuresET || 0) + Number(form.heuresED || 0) + Number(form.heuresEP || 0) + Number(form.heuresSoutenance || 0) + Number(form.heuresRecherche || 0);
+    if (total === 0) missing.push("Heures complémentaires : ET, ED, EP, Soutenance et Recherche sont tous égaux à 0");
+    return missing.length ? `Information manquante ou incohérente :\n- ${missing.join("\n- ")}` : "";
+  };
+
   const handleAddHeuresForSelected = async () => {
     if (!selectedEnsForHeures || !selectedAnnee) return;
-    if (!heuresHCForm.gradeId) {
-      alert("Grade obligatoire (stocké avec les heures pour garder l'historique)");
+    const missingMessage = buildHeuresMissingMessage(heuresHCForm);
+    if (missingMessage) {
+      alert(missingMessage);
       return;
     }
     const payload = {
@@ -511,7 +534,21 @@ export default function HomePage() {
       alert(err.error || "Erreur");
       return;
     }
-    setShowAddHeuresModal(false);
+    const faculteIdToKeep = heuresHCForm.faculteId;
+    setSelectedEnsForHeures(null);
+    setEnsSearchQuery("");
+    setEnsSearchResults([]);
+    setHeuresHCForm({
+      gradeId: "",
+      statut: "Vacataire",
+      faculteId: faculteIdToKeep,
+      heuresET: 0,
+      heuresED: 0,
+      heuresEP: 0,
+      heuresSoutenance: 0,
+      heuresRecherche: 0,
+      obligation: 0,
+    });
     await loadEnseignants();
   };
 
@@ -557,8 +594,9 @@ export default function HomePage() {
     if (!editingHeureId) {
       // Ajout nouvelle ligne
       if (!selectedEns || !selectedAnnee) return;
-      if (!heuresForm.gradeId) {
-        alert("Grade obligatoire");
+      const missingMessage = buildHeuresMissingMessage(heuresForm);
+      if (missingMessage) {
+        alert(missingMessage);
         return;
       }
       await fetch("/api/heures", {
@@ -579,6 +617,11 @@ export default function HomePage() {
         }),
       });
     } else {
+      const missingMessage = buildHeuresMissingMessage(heuresForm);
+      if (missingMessage) {
+        alert(missingMessage);
+        return;
+      }
       await fetch(`/api/heures/${editingHeureId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -597,10 +640,11 @@ export default function HomePage() {
     }
     if (selectedEns) handleOpenHeures(selectedEns);
     await loadEnseignants();
+    const faculteIdToKeep = heuresForm.faculteId;
     setEditingHeureId(null);
     setHeuresForm({
-      faculteId: "",
-      gradeId: grades[0]?.id ? String(grades[0].id) : "",
+      faculteId: faculteIdToKeep,
+      gradeId: "",
       statut: "Vacataire",
       heuresET: 0,
       heuresED: 0,
@@ -677,9 +721,9 @@ export default function HomePage() {
     setFacError("");
     try {
       const res = await fetch("/api/facultes", {
-        method: "POST",
+        method: editingFacId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(facForm),
+        body: JSON.stringify(editingFacId ? { ...facForm, id: editingFacId } : facForm),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -687,11 +731,25 @@ export default function HomePage() {
         return;
       }
       setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", niveau: "", code: "" });
+      setEditingFacId(null);
       setFacSuggestions({});
       loadFacultes();
     } catch (err: any) {
       setFacError(err.message);
     }
+  };
+
+  const handleEditFac = (f: Faculte) => {
+    setEditingFacId(f.id);
+    setFacForm({
+      etablissement: f.etablissement || "",
+      domaine: f.domaine || "",
+      mention: f.mention || "",
+      parcours: f.parcours || "",
+      niveau: f.niveau || "",
+      code: f.code || "",
+    });
+    setFacError("");
   };
 
   const handleDeleteFac = async (id: number) => {
@@ -704,12 +762,26 @@ export default function HomePage() {
   const handleSaveAnnee = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch("/api/annees", {
-      method: "POST",
+      method: editingAnneeId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(anneeForm),
+      body: JSON.stringify(editingAnneeId ? { ...anneeForm, id: editingAnneeId } : anneeForm),
     });
-    setAnneeForm({ libelle: "", tranche: "Première tranche", active: false, appliquerIRSA: true, tauxIRSA: 20, plafondPaiement: "" });
+    setAnneeForm({ libelle: "", tranche: "Première tranche", active: false, appliquerIRSA: true, tauxIRSA: 20, plafondPaiement: "", formuleHC: DEFAULT_HC_FORMULA });
+    setEditingAnneeId(null);
     loadAnnees();
+  };
+
+  const handleEditAnnee = (annee: Annee) => {
+    setEditingAnneeId(annee.id);
+    setAnneeForm({
+      libelle: annee.libelle || "",
+      tranche: annee.tranche || "Première tranche",
+      active: !!annee.active,
+      appliquerIRSA: annee.appliquerIRSA ?? true,
+      tauxIRSA: annee.tauxIRSA ?? 20,
+      plafondPaiement: annee.plafondPaiement || "",
+      formuleHC: annee.formuleHC || DEFAULT_HC_FORMULA,
+    });
   };
 
   const handleUpdateAnnee = async (annee: Annee, field: string, value: unknown) => {
@@ -796,15 +868,6 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-[1800px] mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5">
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard icon={<Users size={18} />} label="Enseignants HC" value={stats.total} sub={`${stats.perm} perm. · ${stats.vacat} vac.`} color="blue" />
-          <StatCard icon={<Clock size={18} />} label="Total Heures" value={`${stats.totalHeures.toFixed(0)}h`} sub="HC Brut" color="emerald" />
-          <StatCard icon={<DollarSign size={18} />} label="Montant Net Total" value={formatAriary(stats.montant)} sub="À payer" color="amber" />
-          <StatCard icon={<Building2 size={18} />} label="Facultés" value={facultes.length} sub="Établissements" color="purple" />
-          <StatCard icon={<GraduationCap size={18} />} label="Base Enseignants" value={allEnseignants.length} sub="Tous confondus" color="rose" />
-        </div>
-
         {/* Toolbar */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
@@ -1110,9 +1173,6 @@ export default function HomePage() {
                 <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">2</span>
                 Saisir les informations HC (Grade & Statut historiques)
               </h3>
-              <p className="text-xs text-slate-500 bg-amber-50 p-2 rounded border border-amber-100">
-                ⚠️ Grade et Statut sont stockés dans la table <code>heures</code> pour garder l&apos;historique correct en cas de promotion ou changement de statut.
-              </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -1156,13 +1216,13 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Faculté / Parcours (saisie assistée)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Faculté / Parcours (saisie assistée) *</label>
                 <select
                   value={heuresHCForm.faculteId}
                   onChange={(e) => setHeuresHCForm({ ...heuresHCForm, faculteId: e.target.value })}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
-                  <option value="">-- Sélectionner (optionnel) --</option>
+                  <option value="">-- Sélectionner --</option>
                   {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.etablissement} - {f.domaine} - {f.mention} {f.parcours ? `- ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
@@ -1187,9 +1247,9 @@ export default function HomePage() {
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
                 <p className="text-xs font-semibold text-slate-600 mb-2">Aperçu calcul (prompt.md)</p>
                 {(() => {
-                  const hcBrut = heuresHCForm.heuresET + heuresHCForm.heuresED + heuresHCForm.heuresEP + heuresHCForm.heuresSoutenance + heuresHCForm.heuresRecherche;
+                  const hcBrut = calcHC(heuresHCForm.heuresET, heuresHCForm.heuresED, heuresHCForm.heuresEP, heuresHCForm.heuresSoutenance, heuresHCForm.heuresRecherche, selectedAnnee?.formuleHC || DEFAULT_HC_FORMULA);
                   const { hcNette } = calcHCNette(hcBrut, heuresHCForm.obligation, heuresHCForm.statut);
-                  const hcArr = Math.floor(hcNette);
+                  const hcArr = calcHCArrondie(hcNette);
                   const taux = grades.find((g) => String(g.id) === heuresHCForm.gradeId)?.tauxHoraire || 0;
                   const brut = hcArr * taux;
                   return (
@@ -1214,8 +1274,7 @@ export default function HomePage() {
               <div className="flex justify-end">
                 <button
                   onClick={handleAddHeuresForSelected}
-                  disabled={!heuresHCForm.gradeId}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 shadow-md"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-md"
                 >
                   <Plus size={16} /> Enregistrer ces heures
                 </button>
@@ -1256,6 +1315,7 @@ export default function HomePage() {
                 }
               : undefined
           }
+          etablissements={Array.from(new Set(facultes.map((f) => f.etablissement).filter(Boolean))).sort()}
           onSave={handleSaveEns}
           onCancel={() => {
             setShowEnsModal(false);
@@ -1299,10 +1359,10 @@ export default function HomePage() {
                     <td className="px-3 py-2 font-bold">{e.nom}</td>
                     <td className="px-3 py-2">{e.prenom || "—"}</td>
                     <td className="px-3 py-2 text-xs">{e.cin || "—"}</td>
-                    <td className="px-3 py-2 text-xs">{e.telephone || "—"}</td>
+                    <td className={`px-3 py-2 text-xs ${e.telephone && e.telephone.replace(/\D/g, "").length !== 10 ? "text-orange-600 font-semibold" : ""}`} title={e.telephone && e.telephone.replace(/\D/g, "").length !== 10 ? "Téléphone incohérent" : ""}>{e.telephone || "—"}</td>
                     <td className="px-3 py-2 text-xs max-w-[150px] truncate">{e.email || "—"}</td>
                     <td className="px-3 py-2 text-xs max-w-[120px] truncate">{e.etablissementPrincipal || "—"}</td>
-                    <td className="px-3 py-2 text-xs max-w-[150px] truncate">{e.rib || "—"}</td>
+                    <td className={`px-3 py-2 text-xs max-w-[150px] truncate ${e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "text-orange-600 font-semibold" : ""}`} title={e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "RIB incohérent" : e.rib || ""}>{e.rib || "—"}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         <button onClick={() => handleEditEns(e)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
@@ -1383,13 +1443,13 @@ export default function HomePage() {
                 />
               </div>
               <div className="sm:col-span-3">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté (Établissement → Domaine → Mention → Parcours)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté (Établissement → Domaine → Mention → Parcours) *</label>
                 <select
                   value={heuresForm.faculteId}
                   onChange={(e) => setHeuresForm({ ...heuresForm, faculteId: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
-                  <option value="">-- Aucune / Non spécifié --</option>
+                  <option value="">-- Sélectionner --</option>
                   {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.etablissement} | {f.domaine} | {f.mention} {f.parcours ? `| ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
@@ -1730,9 +1790,23 @@ export default function HomePage() {
               </div>
             </div>
             {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
-            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
-              <Plus size={16} /> Ajouter faculté
-            </button>
+            <div className="flex gap-2">
+              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
+                <Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter faculté"}
+              </button>
+              {editingFacId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingFacId(null);
+                    setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", niveau: "", code: "" });
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white"
+                >
+                  Annuler édition
+                </button>
+              )}
+            </div>
           </form>
 
           <div className="overflow-x-auto max-h-[300px] border rounded-lg">
@@ -1748,7 +1822,7 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {facultes.map((f) => (
-                  <tr key={f.id} className="hover:bg-slate-50">
+                  <tr key={f.id} onClick={() => handleEditFac(f)} className={`hover:bg-purple-50 cursor-pointer ${editingFacId === f.id ? "bg-yellow-50" : ""}`}>
                     <td className="px-2 py-2 font-medium truncate max-w-[150px]">{f.etablissement}</td>
                     <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
                     <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
@@ -1756,7 +1830,7 @@ export default function HomePage() {
                     <td className="px-2 py-2">{f.niveau || "—"}</td>
                     <td className="px-2 py-2 text-[10px] font-mono">{f.code || "—"}</td>
                     <td className="px-2 py-2 text-center">
-                      <button onClick={() => handleDeleteFac(f.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                      <button onClick={(ev) => { ev.stopPropagation(); handleDeleteFac(f.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Supprimer">
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -1834,17 +1908,41 @@ export default function HomePage() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 />
               </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-slate-700 mb-1">Formule HC Brut modifiable</label>
+                <input
+                  value={anneeForm.formuleHC}
+                  onChange={(e) => setAnneeForm({ ...anneeForm, formuleHC: e.target.value })}
+                  placeholder={DEFAULT_HC_FORMULA}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Variables autorisées : ET, ED, EP, soutenance, recherche. Défaut : {DEFAULT_HC_FORMULA}</p>
+              </div>
             </div>
-            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-              <Plus size={16} /> Ajouter année
-            </button>
+            <div className="flex gap-2">
+              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                <Plus size={16} /> {editingAnneeId ? "Mettre à jour" : "Ajouter année"}
+              </button>
+              {editingAnneeId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAnneeId(null);
+                    setAnneeForm({ libelle: "", tranche: "Première tranche", active: false, appliquerIRSA: true, tauxIRSA: 20, plafondPaiement: "", formuleHC: DEFAULT_HC_FORMULA });
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white"
+                >
+                  Annuler édition
+                </button>
+              )}
+            </div>
           </form>
 
           <div className="overflow-x-auto border rounded-lg">
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {["Année", "Tranche", "IRSA", "Taux", "Plafond", "Active"].map((h) => (
+                  {["Année", "Tranche", "Formule HC", "IRSA", "Taux", "Plafond", "Active"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">
                       {h}
                     </th>
@@ -1853,12 +1951,13 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {annees.map((a) => (
-                  <tr key={a.id} className={`hover:bg-slate-50 ${a.active ? "bg-green-50" : ""}`}>
+                  <tr key={a.id} onClick={() => handleEditAnnee(a)} className={`hover:bg-indigo-50 cursor-pointer ${a.active ? "bg-green-50" : ""} ${editingAnneeId === a.id ? "outline outline-2 outline-indigo-300" : ""}`}>
                     <td className="px-3 py-2 font-medium">{a.libelle}</td>
                     <td className="px-3 py-2 text-xs">{a.tranche}</td>
+                    <td className="px-3 py-2 text-[10px] font-mono max-w-[180px] truncate" title={a.formuleHC || DEFAULT_HC_FORMULA}>{a.formuleHC || DEFAULT_HC_FORMULA}</td>
                     <td className="px-3 py-2 text-center">
                       <button
-                        onClick={() => handleUpdateAnnee(a, "appliquerIRSA", !a.appliquerIRSA)}
+                        onClick={(ev) => { ev.stopPropagation(); handleUpdateAnnee(a, "appliquerIRSA", !a.appliquerIRSA); }}
                         className={`px-2 py-1 rounded text-xs font-medium ${a.appliquerIRSA ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
                       >
                         {a.appliquerIRSA ? "Oui" : "Non"}
@@ -1868,7 +1967,7 @@ export default function HomePage() {
                     <td className="px-3 py-2 text-right text-xs font-mono">{a.plafondPaiement ? Number(a.plafondPaiement).toLocaleString() : "—"}</td>
                     <td className="px-3 py-2 text-center">
                       <button
-                        onClick={() => handleUpdateAnnee(a, "active", !a.active)}
+                        onClick={(ev) => { ev.stopPropagation(); handleUpdateAnnee(a, "active", !a.active); }}
                         className={`px-2 py-1 rounded text-xs font-medium ${a.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}`}
                       >
                         {a.active ? "✓ Active" : "Activer"}
