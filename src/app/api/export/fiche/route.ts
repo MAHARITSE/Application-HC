@@ -7,7 +7,7 @@ import {
   getAnnees,
   getPaiements,
 } from "@/db";
-import { calcHC, calcHCNette, calcMontantBrut, calcIRSA, nombreEnLettres } from "@/lib/metier";
+import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, nombreEnLettres } from "@/lib/metier";
 
 export async function GET(request: Request) {
   try {
@@ -85,10 +85,10 @@ export async function GET(request: Request) {
       });
     }
 
-    const hcBrut = calcHC(totalET, totalED, totalEP, totalSout, totalRech);
+    const hcBrut = calcHC(totalET, totalED, totalEP, totalSout, totalRech, annee?.formuleHC);
     const obligationAppliquee = refStatut === "Permanent" ? refObligation : 0;
     const { hcNette } = calcHCNette(hcBrut, refObligation, refStatut);
-    const hcArrondi = Math.floor(hcNette);
+    const hcArrondi = calcHCArrondie(hcNette);
     const taux = refGrade?.tauxHoraire || 0;
 
     let montantBrut = calcMontantBrut(hcArrondi, taux);

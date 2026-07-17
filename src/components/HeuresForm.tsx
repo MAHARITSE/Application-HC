@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { calcHC, calcHCNette, formatAriary, TAUX_GRADE } from "@/lib/metier";
+import { calcHC, calcHCNette, calcHCArrondie, formatAriary, TAUX_GRADE } from "@/lib/metier";
 import { Trash2, Plus, RefreshCw } from "lucide-react";
 
 interface Props {
@@ -30,13 +30,13 @@ export default function HeuresForm({ enseignantId, anneeId, gradeCode, statut }:
   const totalRech = lignes.reduce((s: number, l: any) => s + (l.heuresRecherche || l.heures?.heuresRecherche || 0), 0);
   const totalHC = calcHC(totalET, totalED, totalEP, totalSout, totalRech);
   const { hcNette, obligationAppliquee } = calcHCNette(totalHC, 125, statut);
-  const hcArrondi = Math.floor(hcNette);
+  const hcArrondi = calcHCArrondie(hcNette);
   const montantBrut = hcArrondi * taux;
 
   return (
     <div className="space-y-4">
       <div className="bg-slate-50 p-4 rounded-lg border">
-        <p className="text-sm text-slate-600">Total HC: {totalHC}h - Obligation: {obligationAppliquee}h - Net: {hcNette}h - Arrondi: {hcArrondi}h - Brut: {formatAriary(montantBrut)}</p>
+        <p className="text-sm text-slate-600">Total HC: {totalHC}h - Obligation: {obligationAppliquee}h - HC Nette: {hcNette.toFixed(2)}h → Arrondie: <strong>{hcArrondi}h</strong> - Brut: {formatAriary(montantBrut)}</p>
         <button onClick={load} className="mt-2 px-3 py-1 bg-indigo-600 text-white rounded text-sm flex items-center gap-1"><RefreshCw size={12}/> Recharger</button>
       </div>
       <div className="space-y-2">

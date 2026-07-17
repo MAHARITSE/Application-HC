@@ -12,11 +12,10 @@
     "id": 2,
     "libelle": "2024-2025",
     "tranche": "Première tranche",
-    "active": false,
-    "appliquerIRSA": false,
+    "active": true,
+    "appliquerIRSA": true,
     "tauxIRSA": 20,
-    "plafondPaiement": null,
-    "formuleHC": "ET*5/3+ED+EP/2+soutenance+recherche"
+    "plafondPaiement": null
   },
   {
     "id": 3,
@@ -25,7 +24,6 @@
     "active": false,
     "appliquerIRSA": false,
     "tauxIRSA": 20,
-    "plafondPaiement": null,
-    "formuleHC": "ET*5/3-ED+EP/2+soutenance+recherche"
+    "plafondPaiement": null
   }
 ]

@@ -7,7 +7,7 @@ import {
   getFacultes,
   getPaiements,
 } from "@/db";
-import { calcHC, calcHCNette, calcMontantBrut, calcIRSA } from "@/lib/metier";
+import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA } from "@/lib/metier";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -63,9 +63,9 @@ export async function GET(req: NextRequest) {
   }
 
   const data = Array.from(map.values()).map((entry, idx) => {
-    const hc = calcHC(entry.totalET, entry.totalED, entry.totalEP, entry.totalSout, entry.totalRech);
+    const hc = calcHC(entry.totalET, entry.totalED, entry.totalEP, entry.totalSout, entry.totalRech, annee?.formuleHC);
     const { hcNette } = calcHCNette(hc, entry.derniereObligation, entry.dernierStatut);
-    const hcArr = Math.floor(hcNette);
+    const hcArr = calcHCArrondie(hcNette);
     const taux = entry.dernierGrade?.tauxHoraire || 0;
     let montantBrut = calcMontantBrut(hcArr, taux);
     if (annee?.plafondPaiement && montantBrut > Number(annee.plafondPaiement)) {

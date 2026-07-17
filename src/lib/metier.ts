@@ -28,11 +28,13 @@ export const ETABLISSEMENTS_TOLIARA = [
   "Faculté de Droit",
 ];
 
-export const DEFAULT_HC_FORMULA = "ET*5/3+ED+EP/2+soutenance+recherche";
+// Formule par défaut : ET*5/3 + ED + EP/2 + Sout. + Rech.
+// Accepte les abréviations : Sout., Rech., Sout, Rech, soutenance, recherche
+export const DEFAULT_HC_FORMULA = "ET*5/3+ED+EP/2+Sout.+Rech.";
 
 /**
  * Calcul des Heures Complémentaires.
- * Formule par défaut demandée: ET*5/3 + ED + EP/2 + Soutenance + Recherche.
+ * Formule par défaut demandée: ET*5/3 + ED + EP/2 + Sout. + Rech.
  * La formule peut être personnalisée par année dans les paramètres.
  */
 export function calcHC(
@@ -62,8 +64,14 @@ export function calcHCWithFormula(
     .replace(/\bET\b/g, String(vars.ET))
     .replace(/\bED\b/g, String(vars.ED))
     .replace(/\bEP\b/g, String(vars.EP))
+    // Supporte plusieurs variantes : soutenance, Sout., Sout, recherche, Rech., Rech
+    // IMPORTANT: Sout. et Rech. avec le point doivent être remplacés AVANT Sout/Rech sans point
+    .replace(/\bSout\.\b/gi, String(vars.soutenance))
+    .replace(/\bRech\.\b/gi, String(vars.recherche))
     .replace(/\bsoutenance\b/gi, String(vars.soutenance))
+    .replace(/\bSout\b/gi, String(vars.soutenance))
     .replace(/\brecherche\b/gi, String(vars.recherche))
+    .replace(/\bRech\b/gi, String(vars.recherche))
     .replace(/,/g, ".");
 
   // Sécurité: uniquement chiffres, opérateurs, espaces, points et parenthèses.

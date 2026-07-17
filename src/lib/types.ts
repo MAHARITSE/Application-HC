@@ -41,7 +41,6 @@ export interface HeureAvecGrade {
     domaine: string;
     mention: string;
     parcours: string | null;
-    niveau: string | null;
   } | null;
 }
 
@@ -82,7 +81,6 @@ export interface Faculte {
   domaine: string;
   mention: string;
   parcours: string | null;
-  niveau: string | null;
   code: string | null;
 }
 

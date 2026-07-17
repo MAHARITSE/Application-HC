@@ -23,6 +23,7 @@ import {
   AlertCircle,
   CreditCard,
   Wallet,
+  Download,
 } from "lucide-react";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, formatAriary, DEFAULT_HC_FORMULA } from "@/lib/metier";
 
@@ -49,7 +50,6 @@ interface Faculte {
   domaine: string;
   mention: string;
   parcours: string | null;
-  niveau: string | null;
   code: string | null;
 }
 interface EnseignantRow {
@@ -185,13 +185,12 @@ export default function HomePage() {
   });
   const [editingHeureId, setEditingHeureId] = useState<number | null>(null);
 
-  // Faculté form selon prompt.md: Etab*, Domaine*, Mention*, Parcours, Niveau
+  // Faculté form selon prompt.md: Etab*, Domaine*, Mention*, Parcours
   const [facForm, setFacForm] = useState({
     etablissement: "",
     domaine: "",
     mention: "",
     parcours: "",
-    niveau: "",
     code: "",
   });
   const [editingFacId, setEditingFacId] = useState<number | null>(null);
@@ -234,7 +233,7 @@ export default function HomePage() {
   const handleFacFieldChange = async (field: keyof typeof facForm, value: string) => {
     setFacForm((f) => ({ ...f, [field]: value }));
     // Autocomplete
-    if (["etablissement", "domaine", "mention", "parcours", "niveau"].includes(field) && value.length >= 1) {
+    if (["etablissement", "domaine", "mention", "parcours"].includes(field) && value.length >= 1) {
       const sugg = await fetchDistinct(field, value);
       setFacSuggestions((s) => ({ ...s, [field]: sugg }));
     }
@@ -730,7 +729,7 @@ export default function HomePage() {
         setFacError(err.error || "Erreur");
         return;
       }
-      setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", niveau: "", code: "" });
+      setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", code: "" });
       setEditingFacId(null);
       setFacSuggestions({});
       loadFacultes();
@@ -746,7 +745,6 @@ export default function HomePage() {
       domaine: f.domaine || "",
       mention: f.mention || "",
       parcours: f.parcours || "",
-      niveau: f.niveau || "",
       code: f.code || "",
     });
     setFacError("");
@@ -936,6 +934,17 @@ export default function HomePage() {
               >
                 <Plus size={16} /> Nouveau
               </button>
+              {selectedAnnee && (
+                <button
+                  onClick={() => {
+                    window.open(`/api/export/excel?anneeId=${selectedAnnee.id}`, '_blank');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm"
+                  title="Exporter en Excel (.xlsx)"
+                >
+                  <Download size={16} /> Excel
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1225,11 +1234,11 @@ export default function HomePage() {
                   <option value="">-- Sélectionner --</option>
                   {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.etablissement} - {f.domaine} - {f.mention} {f.parcours ? `- ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
+                      {f.etablissement} - {f.domaine} - {f.mention} {f.parcours ? `- ${f.parcours}` : ""}
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-400 mt-1">Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau</p>
+                <p className="text-[10px] text-slate-400 mt-1">Hiérarchie: Établissement → Domaine → Mention → Parcours</p>
               </div>
 
               <div>
@@ -1452,7 +1461,7 @@ export default function HomePage() {
                   <option value="">-- Sélectionner --</option>
                   {facultes.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.etablissement} | {f.domaine} | {f.mention} {f.parcours ? `| ${f.parcours}` : ""} {f.niveau ? `(${f.niveau})` : ""}
+                      {f.etablissement} | {f.domaine} | {f.mention} {f.parcours ? `| ${f.parcours}` : ""}
                     </option>
                   ))}
                 </select>
@@ -1692,10 +1701,10 @@ export default function HomePage() {
               <li>
                 Champs obligatoires: <strong>Établissement, Domaine, Mention</strong>
               </li>
-              <li>Optionnels: Parcours, Niveau, Code</li>
+              <li>Optionnels: Parcours, Code</li>
               <li>Vérification des doublons avant insertion</li>
               <li>Saisie assistée (autocomplete) pour tous les champs</li>
-              <li>Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau</li>
+              <li>Hiérarchie: Établissement → Domaine → Mention → Parcours</li>
             </ul>
           </div>
 
@@ -1765,21 +1774,6 @@ export default function HomePage() {
                 </datalist>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Niveau (optionnel)</label>
-                <input
-                  value={facForm.niveau}
-                  onChange={(e) => handleFacFieldChange("niveau", e.target.value)}
-                  list="niveau-list"
-                  placeholder="Ex: L3, M1, M2"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
-                />
-                <datalist id="niveau-list">
-                  {facSuggestions.niveau?.map((s, i) => (
-                    <option key={i} value={s} />
-                  ))}
-                </datalist>
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Code (optionnel)</label>
                 <input
                   value={facForm.code}
@@ -1799,7 +1793,7 @@ export default function HomePage() {
                   type="button"
                   onClick={() => {
                     setEditingFacId(null);
-                    setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", niveau: "", code: "" });
+                    setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", code: "" });
                   }}
                   className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white"
                 >
@@ -1813,7 +1807,7 @@ export default function HomePage() {
             <table className="w-full text-xs">
               <thead className="bg-slate-50 sticky top-0">
                 <tr>
-                  {["Établissement", "Domaine", "Mention", "Parcours", "Niveau", "Code", ""].map((h) => (
+                  {["Établissement", "Domaine", "Mention", "Parcours", "Code", ""].map((h) => (
                     <th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">
                       {h}
                     </th>
@@ -1827,7 +1821,6 @@ export default function HomePage() {
                     <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
                     <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
                     <td className="px-2 py-2">{f.parcours || "—"}</td>
-                    <td className="px-2 py-2">{f.niveau || "—"}</td>
                     <td className="px-2 py-2 text-[10px] font-mono">{f.code || "—"}</td>
                     <td className="px-2 py-2 text-center">
                       <button onClick={(ev) => { ev.stopPropagation(); handleDeleteFac(f.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Supprimer">
