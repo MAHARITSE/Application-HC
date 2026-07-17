@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "id": 1,
+    "enseignantId": 1,
+    "anneeId": 3,
+    "faculteId": 7,
+    "gradeId": 1,
+    "statut": "Vacataire",
+    "heuresET": 10,
+    "heuresED": 10,
+    "heuresEP": 250,
+    "heuresSoutenance": 0,
+    "heuresRecherche": 0,
+    "obligation": 0,
+    "createdAt": "2026-07-17T12:32:00.517Z"
+  }
+]

@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "id": 1,
+    "nom": "MAHARITSE",
+    "prenom": "Hyacinthe",
+    "cin": null,
+    "dateCIN": null,
+    "dateNaissance": null,
+    "lieuNaissance": null,
+    "nationalite": "Malagasy",
+    "adresse": null,
+    "telephone": null,
+    "email": "maharitse@gmail.com",
+    "rib": null,
+    "specialite": null,
+    "etablissementPrincipal": "IHSM",
+    "dateRecrutement": null,
+    "createdAt": "2026-07-17T12:30:04.068Z",
+    "updatedAt": "2026-07-17T12:30:04.068Z"
+  }
+]
