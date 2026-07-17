@@ -26,6 +26,7 @@ export const {
   createGrade,
   updateGrade,
   createFaculte,
+  updateFaculte,
   deleteFaculte,
   createEnseignant,
   updateEnseignant,

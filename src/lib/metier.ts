@@ -28,28 +28,63 @@ export const ETABLISSEMENTS_TOLIARA = [
   "Faculté de Droit",
 ];
 
+export const DEFAULT_HC_FORMULA = "ET*5/3+ED+EP/2+soutenance+recherche";
+
 /**
- * Calcul des Heures Complémentaires selon prompt.md
- * HC Brut = ET + ED + EP + Soutenance + Recherche
+ * Calcul des Heures Complémentaires.
+ * Formule par défaut demandée: ET*5/3 + ED + EP/2 + Soutenance + Recherche.
+ * La formule peut être personnalisée par année dans les paramètres.
  */
 export function calcHC(
   et: number,
   ed: number,
   ep: number,
   soutenance: number,
-  recherche: number
+  recherche: number,
+  formula: string = DEFAULT_HC_FORMULA
 ): number {
-  return (et || 0) + (ed || 0) + (ep || 0) + (soutenance || 0) + (recherche || 0);
+  return calcHCWithFormula({ et, ed, ep, soutenance, recherche }, formula);
+}
+
+export function calcHCWithFormula(
+  values: { et: number; ed: number; ep: number; soutenance: number; recherche: number },
+  formula: string = DEFAULT_HC_FORMULA
+): number {
+  const vars: Record<string, number> = {
+    ET: values.et || 0,
+    ED: values.ed || 0,
+    EP: values.ep || 0,
+    soutenance: values.soutenance || 0,
+    recherche: values.recherche || 0,
+  };
+
+  const expression = (formula || DEFAULT_HC_FORMULA)
+    .replace(/\bET\b/g, String(vars.ET))
+    .replace(/\bED\b/g, String(vars.ED))
+    .replace(/\bEP\b/g, String(vars.EP))
+    .replace(/\bsoutenance\b/gi, String(vars.soutenance))
+    .replace(/\brecherche\b/gi, String(vars.recherche))
+    .replace(/,/g, ".");
+
+  // Sécurité: uniquement chiffres, opérateurs, espaces, points et parenthèses.
+  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
+    return calcHCWithFormula(values, DEFAULT_HC_FORMULA);
+  }
+
+  try {
+    const result = Function(`"use strict"; return (${expression});`)();
+    return Number.isFinite(result) ? Number(result) : 0;
+  } catch {
+    return calcHCWithFormula(values, DEFAULT_HC_FORMULA);
+  }
 }
 
 // Compat
 export const calculerHC = calcHC;
 
 /**
- * Obligation selon prompt:
- * - valeur saisie (défaut 125h, 0 pour vacataires)
- * Si statut = "Permanent" ET obligation > 0: HC Nette = max(0, HC Brut - Obligation)
- * Sinon: HC Nette = HC Brut
+ * HC Nette = max(0, HC Brut - Obligation).
+ * Pour les vacataires, l'obligation est normalement saisie à 0.
  */
 export function calcHCNette(
   hcBrut: number,
@@ -57,17 +92,14 @@ export function calcHCNette(
   statut: string
 ): { hcNette: number; obligationAppliquee: number } {
   const obl = Number(obligation) || 0;
-  if (statut === "Permanent" && obl > 0) {
-    return { hcNette: Math.max(hcBrut - obl, 0), obligationAppliquee: obl };
-  }
-  return { hcNette: hcBrut, obligationAppliquee: statut === "Permanent" ? obl : 0 };
+  return { hcNette: Math.max((hcBrut || 0) - obl, 0), obligationAppliquee: obl };
 }
 
 /**
- * HC Arrondie = floor(HC Nette)
+ * HC Arrondie = ARRONDI(HC Brut - Obligation; 0)
  */
 export function calcHCArrondie(hcNette: number): number {
-  return Math.floor(hcNette || 0);
+  return Math.round(hcNette || 0);
 }
 
 /**

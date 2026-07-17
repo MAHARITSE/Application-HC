@@ -6,6 +6,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const body = await request.json();
 
+    if (body.gradeId !== undefined && !body.gradeId) {
+      return NextResponse.json({ error: "Grade obligatoire" }, { status: 400 });
+    }
+    if (body.faculteId !== undefined && !body.faculteId) {
+      return NextResponse.json({ error: "Faculté / Parcours obligatoire" }, { status: 400 });
+    }
+    const totalHeures =
+      Number(body.heuresET || 0) +
+      Number(body.heuresED || 0) +
+      Number(body.heuresEP || 0) +
+      Number(body.heuresSoutenance || 0) +
+      Number(body.heuresRecherche || 0);
+    if (body.heuresET !== undefined && totalHeures === 0) {
+      return NextResponse.json({ error: "Heures complémentaires obligatoires : toutes les heures ne peuvent pas être égales à 0" }, { status: 400 });
+    }
+
     const updateData: Record<string, any> = {};
     if (body.faculteId !== undefined) updateData.faculteId = body.faculteId ? Number(body.faculteId) : null;
     if (body.gradeId !== undefined) updateData.gradeId = body.gradeId ? Number(body.gradeId) : null;

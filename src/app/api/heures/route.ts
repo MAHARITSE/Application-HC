@@ -64,8 +64,19 @@ export async function POST(request: Request) {
 
     if (!body.enseignantId) return NextResponse.json({ error: "enseignantId requis" }, { status: 400 });
     if (!body.anneeId) return NextResponse.json({ error: "anneeId requis" }, { status: 400 });
-    if (!body.gradeId) return NextResponse.json({ error: "Grade obligatoire (stocké dans heures pour historique)" }, { status: 400 });
+    if (!body.gradeId) return NextResponse.json({ error: "Grade obligatoire (au moment de la saisie)" }, { status: 400 });
+    if (!body.faculteId) return NextResponse.json({ error: "Faculté / Parcours obligatoire" }, { status: 400 });
     if (!body.statut) return NextResponse.json({ error: "Statut obligatoire (Permanent/Vacataire)" }, { status: 400 });
+
+    const totalHeures =
+      Number(body.heuresET || 0) +
+      Number(body.heuresED || 0) +
+      Number(body.heuresEP || 0) +
+      Number(body.heuresSoutenance || 0) +
+      Number(body.heuresRecherche || 0);
+    if (totalHeures === 0) {
+      return NextResponse.json({ error: "Heures complémentaires obligatoires : ET, ED, EP, Soutenance et Recherche ne peuvent pas toutes être égales à 0" }, { status: 400 });
+    }
 
     const statut = body.statut === "Permanent" ? "Permanent" : "Vacataire";
     let obligation = body.obligation;

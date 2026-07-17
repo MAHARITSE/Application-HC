@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       appliquerIRSA: body.appliquerIRSA ?? true,
       tauxIRSA: body.tauxIRSA ?? 20,
       plafondPaiement: body.plafondPaiement ? String(body.plafondPaiement) : null,
+      formuleHC: body.formuleHC?.trim() || "ET*5/3+ED+EP/2+soutenance+recherche",
     });
 
     return NextResponse.json(newAnnee);
@@ -51,6 +52,7 @@ export async function PUT(request: Request) {
       appliquerIRSA: body.appliquerIRSA,
       tauxIRSA: body.tauxIRSA,
       plafondPaiement: body.plafondPaiement ? String(body.plafondPaiement) : null,
+      formuleHC: body.formuleHC?.trim() || "ET*5/3+ED+EP/2+soutenance+recherche",
     });
 
     if (!updated) {

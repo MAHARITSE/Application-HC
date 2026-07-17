@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFacultes, createFaculte, deleteFaculte } from "@/db";
+import { getFacultes, createFaculte, updateFaculte, deleteFaculte } from "@/db";
 
 export async function GET(request: Request) {
   try {
@@ -104,6 +104,45 @@ export async function DELETE(request: Request) {
 
     deleteFaculte(Number(id));
     return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    if (!body.id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    const etablissement = body.etablissement?.trim();
+    const domaine = body.domaine?.trim();
+    const mention = body.mention?.trim();
+
+    if (!etablissement) return NextResponse.json({ error: "Établissement obligatoire" }, { status: 400 });
+    if (!domaine) return NextResponse.json({ error: "Domaine obligatoire" }, { status: 400 });
+    if (!mention) return NextResponse.json({ error: "Mention obligatoire" }, { status: 400 });
+
+    const parcours = body.parcours?.trim() || null;
+    const niveau = body.niveau?.trim() || null;
+    const code = body.code?.trim() || null;
+
+    const existing = getFacultes().find((f) =>
+      f.id !== Number(body.id) &&
+      (f.etablissement || "").toLowerCase() === etablissement.toLowerCase() &&
+      (f.domaine || "").toLowerCase() === domaine.toLowerCase() &&
+      (f.mention || "").toLowerCase() === mention.toLowerCase() &&
+      (f.parcours || "").toLowerCase() === (parcours || "").toLowerCase() &&
+      (f.niveau || "").toLowerCase() === (niveau || "").toLowerCase()
+    );
+
+    if (existing) {
+      return NextResponse.json({ error: "Cette faculté existe déjà" }, { status: 409 });
+    }
+
+    const updated = updateFaculte(Number(body.id), { etablissement, domaine, mention, parcours, niveau, code });
+    if (!updated) return NextResponse.json({ error: "Faculté non trouvée" }, { status: 404 });
+    return NextResponse.json(updated);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -21,6 +21,7 @@ interface EnseignantFormData {
 
 interface Props {
   initialData?: Partial<EnseignantFormData>;
+  etablissements?: string[];
   onSave: (data: EnseignantFormData) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
@@ -43,7 +44,7 @@ const EMPTY: EnseignantFormData = {
   dateRecrutement: "",
 };
 
-export default function EnseignantForm({ initialData, onSave, onCancel, loading }: Props) {
+export default function EnseignantForm({ initialData, etablissements = [], onSave, onCancel, loading }: Props) {
   const [form, setForm] = useState<EnseignantFormData>({ ...EMPTY, ...initialData } as any);
 
   useEffect(() => {
@@ -58,6 +59,11 @@ export default function EnseignantForm({ initialData, onSave, onCancel, loading 
   const handleTelChange = (v: string) => set("telephone", formatTelephoneInput(v));
   const handleRibChange = (v: string) => set("rib", formatRIBInput(v));
 
+  const telDigits = form.telephone.replace(/\D/g, "");
+  const ribDigits = form.rib.replace(/\D/g, "");
+  const telephoneIncoherent = form.telephone.trim().length > 0 && telDigits.length !== 10;
+  const ribIncoherent = form.rib.trim().length > 0 && ribDigits.length !== 23;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.nom.trim()) {
@@ -68,6 +74,7 @@ export default function EnseignantForm({ initialData, onSave, onCancel, loading 
   };
 
   const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white";
+  const warningInputClass = "w-full px-3 py-2 border border-orange-400 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-orange-50";
   const labelClass = "block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1";
 
   return (
@@ -113,7 +120,8 @@ export default function EnseignantForm({ initialData, onSave, onCancel, loading 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className={labelClass}>Téléphone (000 00 000 00)</label>
-            <input value={form.telephone} onChange={(e) => handleTelChange(e.target.value)} placeholder="034 12 345 67" className={inputClass} />
+            <input value={form.telephone} onChange={(e) => handleTelChange(e.target.value)} placeholder="034 12 345 67" className={telephoneIncoherent ? warningInputClass : inputClass} />
+            {telephoneIncoherent && <p className="text-[10px] text-orange-600 mt-1">⚠️ Téléphone incohérent : 10 chiffres attendus.</p>}
           </div>
           <div>
             <label className={labelClass}>Email</label>
@@ -125,7 +133,8 @@ export default function EnseignantForm({ initialData, onSave, onCancel, loading 
           </div>
           <div className="md:col-span-2">
             <label className={labelClass}>RIB (00005 00001 12094250100 09)</label>
-            <input value={form.rib} onChange={(e) => handleRibChange(e.target.value)} placeholder="00005 00001 12094250100 09" className={inputClass} />
+            <input value={form.rib} onChange={(e) => handleRibChange(e.target.value)} placeholder="00005 00001 12094250100 09" className={ribIncoherent ? warningInputClass : inputClass} />
+            {ribIncoherent && <p className="text-[10px] text-orange-600 mt-1">⚠️ RIB incohérent : 23 chiffres attendus.</p>}
           </div>
           <div>
             <label className={labelClass}>Spécialité</label>
@@ -139,17 +148,19 @@ export default function EnseignantForm({ initialData, onSave, onCancel, loading 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Établissement principal</label>
-            <input value={form.etablissementPrincipal} onChange={(e) => set("etablissementPrincipal", e.target.value)} placeholder="Université de Toliara" className={inputClass} />
+            <input value={form.etablissementPrincipal} onChange={(e) => set("etablissementPrincipal", e.target.value)} list="etablissements-principaux-list" placeholder="Université de Toliara" className={inputClass} />
+            <datalist id="etablissements-principaux-list">
+              {etablissements.map((etab) => (
+                <option key={etab} value={etab} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label className={labelClass}>Date de recrutement</label>
             <input type="date" value={form.dateRecrutement} onChange={(e) => set("dateRecrutement", e.target.value)} className={inputClass} />
           </div>
         </div>
-        <p className="text-xs text-slate-500 mt-3 bg-white p-2 rounded border border-indigo-100">
-          ⚠️ Le <strong>Grade</strong> et le <strong>Statut</strong> ne sont PAS ici. Ils sont saisis lors de la saisie des heures complémentaires (onglet &quot;Saisir Heures&quot;)
-          car ils peuvent changer d&apos;une année à l&apos;autre.
-        </p>
+
       </div>
 
       <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
