@@ -1,46 +1,47 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { facultes } from "@/db/schema";
-import { and, asc, eq, ilike, sql } from "drizzle-orm";
+import { getFacultes, createFaculte, deleteFaculte } from "@/db";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q")?.trim();
-    const field = searchParams.get("field"); // pour autocomplete distinct values
+    const field = searchParams.get("field");
     const distinct = searchParams.get("distinct") === "true";
 
-    // Autocomplete distinct values pour un champ donné
+    let facultes = getFacultes();
+
+    // Autocomplete distinct values
     if (field && distinct) {
       const allowed = ["etablissement", "domaine", "mention", "parcours", "niveau"] as const;
       if (!allowed.includes(field as any)) {
         return NextResponse.json({ error: "Champ invalide" }, { status: 400 });
       }
-      // Use raw distinct query
-      const col = (facultes as any)[field];
-      const results = await db
-        .selectDistinct({ value: col })
-        .from(facultes)
-        .where(q ? ilike(col, `%${q}%`) : undefined)
-        .orderBy(asc(col))
-        .limit(50);
-      const values = results.map((r: any) => r.value).filter(Boolean);
+
+      const set = new Set<string>();
+      for (const f of facultes) {
+        const val = (f as any)[field];
+        if (val && (!q || val.toLowerCase().includes(q.toLowerCase()))) {
+          set.add(val);
+        }
+      }
+      const values = Array.from(set).sort().slice(0, 50);
       return NextResponse.json(values);
     }
 
     if (q) {
-      const results = await db
-        .select()
-        .from(facultes)
-        .where(
-          sql`LOWER(${facultes.etablissement}) LIKE LOWER(${"%" + q + "%"}) OR LOWER(${facultes.domaine}) LIKE LOWER(${"%" + q + "%"}) OR LOWER(${facultes.mention}) LIKE LOWER(${"%" + q + "%"}) OR LOWER(${facultes.parcours}) LIKE LOWER(${"%" + q + "%"})`
-        )
-        .orderBy(asc(facultes.etablissement));
-      return NextResponse.json(results);
+      const lowerQ = q.toLowerCase();
+      facultes = facultes.filter((f) =>
+        (f.etablissement || "").toLowerCase().includes(lowerQ) ||
+        (f.domaine || "").toLowerCase().includes(lowerQ) ||
+        (f.mention || "").toLowerCase().includes(lowerQ) ||
+        (f.parcours || "").toLowerCase().includes(lowerQ) ||
+        (f.niveau || "").toLowerCase().includes(lowerQ)
+      );
     }
 
-    const result = await db.select().from(facultes).orderBy(asc(facultes.etablissement));
-    return NextResponse.json(result);
+    return NextResponse.json(
+      facultes.sort((a, b) => (a.etablissement || "").localeCompare(b.etablissement || ""))
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -63,44 +64,34 @@ export async function POST(request: Request) {
     const niveau = body.niveau?.trim() || null;
     const code = body.code?.trim() || null;
 
-    // Vérification doublons avant insertion (insensible à la casse)
-    const existing = await db
-      .select()
-      .from(facultes)
-      .where(
-        and(
-          sql`LOWER(${facultes.etablissement}) = LOWER(${etablissement})`,
-          sql`LOWER(${facultes.domaine}) = LOWER(${domaine})`,
-          sql`LOWER(${facultes.mention}) = LOWER(${mention})`,
-          parcours ? sql`LOWER(${facultes.parcours}) = LOWER(${parcours})` : sql`${facultes.parcours} IS NULL`,
-          niveau ? sql`LOWER(${facultes.niveau}) = LOWER(${niveau})` : sql`${facultes.niveau} IS NULL`
-        )
-      );
+    // Vérification doublons
+    const existing = getFacultes().find((f) =>
+      (f.etablissement || "").toLowerCase() === etablissement.toLowerCase() &&
+      (f.domaine || "").toLowerCase() === domaine.toLowerCase() &&
+      (f.mention || "").toLowerCase() === mention.toLowerCase() &&
+      (f.parcours || "")?.toLowerCase() === (parcours || "").toLowerCase() &&
+      (f.niveau || "")?.toLowerCase() === (niveau || "").toLowerCase()
+    );
 
-    if (existing.length > 0) {
+    if (existing) {
       return NextResponse.json(
         { error: "Cette faculté existe déjà (même établissement/domaine/mention/parcours/niveau)" },
         { status: 409 }
       );
     }
 
-    const [result] = await db
-      .insert(facultes)
-      .values({
-        etablissement,
-        domaine,
-        mention,
-        parcours,
-        niveau,
-        code,
-      })
-      .returning();
-    return NextResponse.json(result);
+    const newFac = createFaculte({
+      etablissement,
+      domaine,
+      mention,
+      parcours,
+      niveau,
+      code,
+    });
+
+    return NextResponse.json(newFac);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("duplicate")) {
-      return NextResponse.json({ error: "Faculté déjà existante (doublon)" }, { status: 409 });
-    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -111,7 +102,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await db.delete(facultes).where(eq(facultes.id, Number(id)));
+    deleteFaculte(Number(id));
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";

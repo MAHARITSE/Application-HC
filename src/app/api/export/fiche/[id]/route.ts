@@ -1,44 +1,48 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { enseignants, grades, heures, facultes, annees, paiements } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  getEnseignants,
+  getGrades,
+  getHeures,
+  getFacultes,
+  getAnnees,
+  getPaiements,
+} from "@/db";
 import { calcHC, calcHCNette, calcMontantBrut, calcIRSA, nombreEnLettres } from "@/lib/metier";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const eid = Number(id);
-    // On prend la dernière année active par défaut si pas fournie? Ici on exige via query? Mais pour compat on prend annee active
-    const [anneeActive] = await db.select().from(annees).where(eq(annees.active, true)).limit(1);
+
+    const anneesList = getAnnees();
+    const [anneeActive] = anneesList.filter((a) => a.active).slice(0, 1);
     const anneeId = anneeActive?.id;
     if (!anneeId) {
       return NextResponse.json({ error: "Aucune année active" }, { status: 404 });
     }
 
-    const [ens] = await db.select().from(enseignants).where(eq(enseignants.id, eid));
+    const ens = getEnseignants().find((e) => e.id === eid);
     if (!ens) return NextResponse.json({ error: "Enseignant not found" }, { status: 404 });
 
-    const heuresData = await db
-      .select({ heures: heures, faculte: facultes, grade: grades })
-      .from(heures)
-      .leftJoin(facultes, eq(heures.faculteId, facultes.id))
-      .leftJoin(grades, eq(heures.gradeId, grades.id))
-      .where(and(eq(heures.enseignantId, eid), eq(heures.anneeId, anneeId)));
+    const heuresData = getHeures()
+      .filter((h) => h.enseignantId === eid && h.anneeId === anneeId)
+      .map((h) => ({
+        heures: h,
+        faculte: h.faculteId ? getFacultes().find((f) => f.id === h.faculteId) : null,
+        grade: h.gradeId ? getGrades().find((g) => g.id === h.gradeId) : null,
+      }));
 
-    const paies = await db.select().from(paiements).where(and(eq(paiements.enseignantId, eid), eq(paiements.anneeId, anneeId)));
+    const paies = getPaiements().filter((p) => p.enseignantId === eid && p.anneeId === anneeId);
 
     if (heuresData.length === 0) {
       return NextResponse.json({ error: "Aucune heure" }, { status: 404 });
     }
 
-    let totalET = 0,
-      totalED = 0,
-      totalEP = 0,
-      totalSout = 0,
-      totalRech = 0;
+    let totalET = 0, totalED = 0, totalEP = 0, totalSout = 0, totalRech = 0;
     let refGrade: any = null;
     let refStatut = "Vacataire";
     let refObligation = 0;
+
     const detailsParFaculte: Record<string, any[]> = {};
 
     const sorted = [...heuresData].sort((a, b) => a.heures.id - b.heures.id);
@@ -71,8 +75,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const { hcNette } = calcHCNette(hcBrut, refObligation, refStatut);
     const hcArrondi = Math.floor(hcNette);
     const taux = refGrade?.tauxHoraire || 0;
+
     let montantBrut = calcMontantBrut(hcArrondi, taux);
-    if (anneeActive.plafondPaiement && montantBrut > Number(anneeActive.plafondPaiement)) montantBrut = Number(anneeActive.plafondPaiement);
+    if (anneeActive.plafondPaiement && montantBrut > Number(anneeActive.plafondPaiement)) {
+      montantBrut = Number(anneeActive.plafondPaiement);
+    }
+
     const montantIRSA = calcIRSA(montantBrut, anneeActive.tauxIRSA || 20, anneeActive.appliquerIRSA ?? true);
     const montantNet = montantBrut - montantIRSA;
     const totalAvance = paies.reduce((s, p) => s + (p.montantAvance || 0), 0);

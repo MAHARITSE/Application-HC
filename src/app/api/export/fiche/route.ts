@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { enseignants, grades, heures, facultes, annees, paiements } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  getEnseignants,
+  getGrades,
+  getHeures,
+  getFacultes,
+  getAnnees,
+  getPaiements,
+} from "@/db";
 import { calcHC, calcHCNette, calcMontantBrut, calcIRSA, nombreEnLettres } from "@/lib/metier";
 
 export async function GET(request: Request) {
@@ -18,64 +23,34 @@ export async function GET(request: Request) {
     const eid = Number(enseignantId);
     const aid = Number(anneeId);
 
-    // Enseignant
-    const [ens] = await db.select().from(enseignants).where(eq(enseignants.id, eid));
+    const ens = getEnseignants().find((e) => e.id === eid);
     if (!ens) return NextResponse.json({ error: "Enseignant not found" }, { status: 404 });
 
-    // Année
-    const [annee] = await db.select().from(annees).where(eq(annees.id, aid));
+    const annee = getAnnees().find((a) => a.id === aid);
     if (!annee) return NextResponse.json({ error: "Année not found" }, { status: 404 });
 
-    // Heures avec grades et facultés - NEW MODEL: grade et statut sont dans heures
-    const heuresData = await db
-      .select({
-        heures: heures,
-        faculte: facultes,
-        grade: grades,
-      })
-      .from(heures)
-      .leftJoin(facultes, eq(heures.faculteId, facultes.id))
-      .leftJoin(grades, eq(heures.gradeId, grades.id))
-      .where(and(eq(heures.enseignantId, eid), eq(heures.anneeId, aid)));
+    const heuresData = getHeures()
+      .filter((h) => h.enseignantId === eid && h.anneeId === aid)
+      .map((h) => ({
+        heures: h,
+        faculte: h.faculteId ? getFacultes().find((f) => f.id === h.faculteId) : null,
+        grade: h.gradeId ? getGrades().find((g) => g.id === h.gradeId) : null,
+      }));
 
     if (heuresData.length === 0) {
       return NextResponse.json({ error: "Aucune heure pour cet enseignant cette année" }, { status: 404 });
     }
 
-    // Paiements
-    const paies = await db
-      .select()
-      .from(paiements)
-      .where(and(eq(paiements.enseignantId, eid), eq(paiements.anneeId, aid)));
+    const paies = getPaiements().filter((p) => p.enseignantId === eid && p.anneeId === aid);
 
-    // Calculs totaux
-    let totalET = 0,
-      totalED = 0,
-      totalEP = 0,
-      totalSout = 0,
-      totalRech = 0;
+    let totalET = 0, totalED = 0, totalEP = 0, totalSout = 0, totalRech = 0;
 
-    const detailsParFaculte: Record<
-      string,
-      {
-        etablissement: string;
-        domaine: string;
-        mention: string;
-        parcours: string;
-        et: number;
-        ed: number;
-        ep: number;
-        sout: number;
-        rech: number;
-      }[]
-    > = {};
+    const detailsParFaculte: Record<string, any[]> = {};
 
-    // Pour déterminer grade/statut/obligation de référence: on prend le dernier (max id)
-    let refGrade: typeof grades.$inferSelect | null = null;
-    let refStatut: string = "Vacataire";
-    let refObligation: number = 0;
+    let refGrade: any = null;
+    let refStatut = "Vacataire";
+    let refObligation = 0;
 
-    // Trier par id pour avoir le dernier comme référence
     const sorted = [...heuresData].sort((a, b) => a.heures.id - b.heures.id);
 
     for (const h of sorted) {
@@ -111,16 +86,12 @@ export async function GET(request: Request) {
     }
 
     const hcBrut = calcHC(totalET, totalED, totalEP, totalSout, totalRech);
-
-    // Obligation selon nouveau modèle: valeur dans heures (dernier)
-    // Si vacataire ou obligation 0 => pas d'obligation
     const obligationAppliquee = refStatut === "Permanent" ? refObligation : 0;
     const { hcNette } = calcHCNette(hcBrut, refObligation, refStatut);
     const hcArrondi = Math.floor(hcNette);
     const taux = refGrade?.tauxHoraire || 0;
 
     let montantBrut = calcMontantBrut(hcArrondi, taux);
-    // Plafond
     if (annee.plafondPaiement && montantBrut > Number(annee.plafondPaiement)) {
       montantBrut = Number(annee.plafondPaiement);
     }

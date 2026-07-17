@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { heures } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getHeures, updateHeure, deleteHeure } from "@/db";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,8 +17,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.heuresRecherche !== undefined) updateData.heuresRecherche = Number(body.heuresRecherche) || 0;
     if (body.obligation !== undefined) updateData.obligation = Number(body.obligation);
 
-    const [result] = await db.update(heures).set(updateData).where(eq(heures.id, Number(id))).returning();
-    return NextResponse.json(result);
+    const updated = updateHeure(Number(id), updateData);
+    if (!updated) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(updated);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -30,7 +31,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    await db.delete(heures).where(eq(heures.id, Number(id)));
+    deleteHeure(Number(id));
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
@@ -41,9 +42,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const [result] = await db.select().from(heures).where(eq(heures.id, Number(id)));
-    if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(result);
+    const h = getHeures().find((x) => x.id === Number(id));
+    if (!h) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(h);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

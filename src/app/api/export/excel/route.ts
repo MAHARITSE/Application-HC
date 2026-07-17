@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { enseignants, heures, grades, facultes, paiements, annees } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  getAnnees,
+  getHeures,
+  getEnseignants,
+  getGrades,
+  getFacultes,
+  getPaiements,
+} from "@/db";
 import { calcHC, calcHCNette, calcMontantBrut, calcIRSA } from "@/lib/metier";
 
 export async function GET(request: Request) {
@@ -10,46 +15,33 @@ export async function GET(request: Request) {
     const anneeIdStr = searchParams.get("anneeId");
     const anneeId = anneeIdStr ? Number(anneeIdStr) : null;
 
-    let heuresData;
-    let annee = null;
+    const anneesList = getAnnees();
+    const annee = anneeId ? anneesList.find((a) => a.id === anneeId) || null : null;
 
+    let heuresList = getHeures();
     if (anneeId) {
-      const [a] = await db.select().from(annees).where(eq(annees.id, anneeId));
-      annee = a;
-      heuresData = await db
-        .select({
-          heure: heures,
-          enseignant: enseignants,
-          grade: grades,
-          faculte: facultes,
-        })
-        .from(heures)
-        .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
-        .leftJoin(grades, eq(heures.gradeId, grades.id))
-        .leftJoin(facultes, eq(heures.faculteId, facultes.id))
-        .where(eq(heures.anneeId, anneeId));
-    } else {
-      heuresData = await db
-        .select({
-          heure: heures,
-          enseignant: enseignants,
-          grade: grades,
-          faculte: facultes,
-        })
-        .from(heures)
-        .innerJoin(enseignants, eq(heures.enseignantId, enseignants.id))
-        .leftJoin(grades, eq(heures.gradeId, grades.id))
-        .leftJoin(facultes, eq(heures.faculteId, facultes.id));
+      heuresList = heuresList.filter((h) => h.anneeId === anneeId);
     }
 
+    const enseignantsList = getEnseignants();
+    const gradesList = getGrades();
+    const facultesList = getFacultes();
+
+    const heuresData = heuresList.map((h) => ({
+      heure: h,
+      enseignant: enseignantsList.find((e) => e.id === h.enseignantId),
+      grade: h.gradeId ? gradesList.find((g) => g.id === h.gradeId) : null,
+      faculte: h.faculteId ? facultesList.find((f) => f.id === h.faculteId) : null,
+    })).filter((row) => row.enseignant);
+
     const paiementsData = anneeId
-      ? await db.select().from(paiements).where(eq(paiements.anneeId, anneeId))
-      : await db.select().from(paiements);
+      ? getPaiements().filter((p) => p.anneeId === anneeId)
+      : getPaiements();
 
     // Agrégation
     const map = new Map<number, any>();
     for (const row of heuresData) {
-      const eid = row.enseignant.id;
+      const eid = row.enseignant!.id;
       if (!map.has(eid)) {
         map.set(eid, {
           enseignant: row.enseignant,
@@ -84,7 +76,10 @@ export async function GET(request: Request) {
       let montantBrut = calcMontantBrut(hcArr, taux, annee?.plafondPaiement ? Number(annee.plafondPaiement) : null);
       const irsa = calcIRSA(montantBrut, annee?.tauxIRSA || 20, annee?.appliquerIRSA ?? true);
       const montantNet = montantBrut - irsa;
-      const totalAvance = paiementsData.filter((p) => p.enseignantId === entry.enseignant.id).reduce((s, p) => s + (p.montantAvance || 0), 0);
+      const totalAvance = paiementsData
+        .filter((p) => p.enseignantId === entry.enseignant.id)
+        .reduce((s, p) => s + (p.montantAvance || 0), 0);
+
       return {
         numero: idx + 1,
         nom: entry.enseignant.nom,
@@ -111,8 +106,7 @@ export async function GET(request: Request) {
       };
     });
 
-    // On retourne JSON pour l'instant, l'export Excel sera fait côté front via lib
-    // Ou on peut générer un CSV simple
+    // Génère CSV
     const csvHeader = [
       "N°",
       "Nom",
@@ -172,7 +166,7 @@ export async function GET(request: Request) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename=\"hc_export_${annee?.libelle || "all"}_${new Date().toISOString().slice(0, 10)}.csv\"`,
+        "Content-Disposition": `attachment; filename="hc_export_${annee?.libelle || "all"}_${new Date().toISOString().slice(0, 10)}.csv"`,
       },
     });
   } catch (error: unknown) {
