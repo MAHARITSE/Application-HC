@@ -1,0 +1,18 @@
+{
+  "app": {
+    "name": "HC-Manager",
+    "host": "127.0.0.1",
+    "port": 3000,
+    "mode": "dev",
+    "openBrowser": true
+  },
+  "database": {
+    "url": "postgresql://postgres:postgres@127.0.0.1:5432/app_db"
+  },
+  "setup": {
+    "installDependencies": true,
+    "createEnvFile": false,
+    "syncDrizzleConfig": true,
+    "pushDatabaseSchema": true
+  }
+}
