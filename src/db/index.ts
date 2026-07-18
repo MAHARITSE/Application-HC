@@ -24,6 +24,9 @@ export const {
   getStructures,
   saveStructures,
   createStructure,
+  createEtablissement,
+  createDomaine,
+  createMention,
   updateStructure,
   deleteStructure,
   // Alias historiques : conservés pour les migrations externes.
