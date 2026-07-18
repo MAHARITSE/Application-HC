@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "id": 1,
+    "enseignantId": 18,
+    "anneeId": 3,
+    "faculteId": 17,
+    "gradeId": 2,
+    "statut": "Vacataire",
+    "heuresET": 0,
+    "heuresED": 0,
+    "heuresEP": 20,
+    "heuresSoutenance": 0,
+    "heuresRecherche": 0,
+    "obligation": 0,
+    "createdAt": "2026-07-18T05:30:13.317Z"
+  },
+  {
+    "id": 2,
+    "enseignantId": 18,
+    "anneeId": 3,
+    "faculteId": 26,
+    "gradeId": 2,
+    "statut": "Vacataire",
+    "heuresET": 0,
+    "heuresED": 0,
+    "heuresEP": 10,
+    "heuresSoutenance": 0,
+    "heuresRecherche": 0,
+    "obligation": 0,
+    "createdAt": "2026-07-18T05:38:32.288Z"
+  }
+]
