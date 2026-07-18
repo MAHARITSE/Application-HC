@@ -9,19 +9,26 @@ import path from "path";
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch {
+    // Système de fichiers en lecture seule (ex : déploiement serverless
+    // Netlify/Vercel). On ignore : l'application fonctionne alors en lecture
+    // seule sur les données livrées avec le build.
   }
 }
 
 function readJson<T>(filename: string, defaultValue: T[] = []): T[] {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, filename);
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
-    return defaultValue;
-  }
   try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+      // Pas d'écriture ici : en lecture seule on retourne simplement la valeur
+      // par défaut pour ne jamais faire échouer une lecture (route GET).
+      return defaultValue;
+    }
     const content = fs.readFileSync(filePath, "utf8");
     return JSON.parse(content) || defaultValue;
   } catch {
@@ -30,9 +37,21 @@ function readJson<T>(filename: string, defaultValue: T[] = []): T[] {
 }
 
 function writeJson<T>(filename: string, data: T[]) {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, filename);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, filename);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const isReadOnly = /read-only|EROFS|EACCES|permission/i.test(msg);
+    if (isReadOnly) {
+      throw new Error(
+        "Stockage en lecture seule : l'écriture n'est pas prise en charge sur ce déploiement (serverless). " +
+          "Les données affichées proviennent des fichiers livrés avec le build."
+      );
+    }
+    throw new Error(`Échec d'écriture de ${filename} : ${msg}`);
+  }
 }
 
 // Auto-increment helper

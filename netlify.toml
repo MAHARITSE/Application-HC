@@ -1,0 +1,22 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration de déploiement Netlify – HC-Manager (Next.js 16, mode JSON-only)
+# ─────────────────────────────────────────────────────────────────────────────
+[build]
+  # Le plugin @netlify/plugin-nextjs détecte Next.js et gère automatiquement
+  # le répertoire de publication (.next) ainsi que les routes API serverless.
+  command = "npm run build"
+
+[build.environment]
+  # Next.js 16 requiert Node >= 20.9 (on utilise 22, identique à l'environnement local).
+  NODE_VERSION = "22"
+  # Évite que Netlify ne remplace le lockfile.
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Note : sur Netlify le système de fichiers de la fonction serverless est en
+# lecture seule. Les fichiers data/*.json sont donc livrés avec le build et
+# lus tels quels (affichage, filtres, fiches, exports). Les écritures
+# (ajout/modif/suppression) renvoient un message clair mais ne persistent pas.
+# Pour une persistance complète, ajouter Netlify Blobs ou une base PostgreSQL.
