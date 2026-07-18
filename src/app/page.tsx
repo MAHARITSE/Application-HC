@@ -934,6 +934,35 @@ export default function HomePage() {
     loadFacultes();
   };
 
+  const handleStructureRowClick = (f: Faculte) => {
+    // Remettre en haut pour modification : remplir le formulaire du niveau le plus complet
+    // Recherche des IDs correspondants
+    const etab = etablissements.find((et) => et.etablissement === f.etablissement);
+    const etabId = etab ? String(etab.id) : "";
+    const dom = domaines.find((d) => d.domaine === f.domaine && (etabId ? d.etablissementId === Number(etabId) : true));
+    const domId = dom ? String(dom.id) : "";
+
+    // On bascule vers l'onglet mention pour afficher tous les champs, et on remplit structureForm
+    setStructureTab("mention");
+    setStructureForm({
+      etablissement: f.etablissement || "",
+      etablissementId: etabId,
+      domaine: f.domaine || "",
+      domaineId: domId,
+      mention: f.mention || "",
+      parcours: f.parcours || "",
+    });
+    setFacError("");
+    // Pour compatibilité avec l'ancien formulaire facForm si utilisé
+    setEditingFacId(f.id);
+    setFacForm({
+      etablissement: f.etablissement || "",
+      domaine: f.domaine || "",
+      mention: f.mention || "",
+      parcours: f.parcours || "",
+    });
+  };
+
   // ── Années ──────────────────────────────────────────────────────────────────
   const handleSaveAnnee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1210,9 +1239,14 @@ export default function HomePage() {
                         trancheLabel,
                       } = calcRow(e);
                       return (
-                        <tr key={e.id} className={`hover:bg-indigo-50/50 transition ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}>
+                        <tr
+                          key={e.id}
+                          onDoubleClick={() => handleOpenHeures(e)}
+                          title="Double-clic sur la ligne pour gérer les heures (grade/statut historiques)"
+                          className={`hover:bg-indigo-50/50 transition cursor-pointer ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}
+                        >
                           <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
-                          <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]" onDoubleClick={() => handleOpenHeures(e)} title="Double-clic pour ouvrir les heures">
+                          <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]">
                             <div className="truncate">{e.nomPrenom}</div>
                             {e.specialite && <div className="text-[10px] text-slate-400 font-normal truncate">{e.specialite}</div>}
                           </td>
@@ -1282,8 +1316,8 @@ export default function HomePage() {
                               <div className="text-[9px] text-emerald-600 font-medium">Soldé</div>
                             )}
                           </td>
-                          <td className="px-1 py-2.5">
-                            <div className="flex items-center justify-center gap-0.5">
+                          <td className="px-1 py-2.5" onDoubleClick={(ev) => ev.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-0.5" onDoubleClick={(ev) => ev.stopPropagation()}>
                               <button onClick={() => handleEditEns(e)} title="Modifier infos base (sans grade/statut)" className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 transition">
                                 <Edit size={14} />
                               </button>
@@ -1619,7 +1653,12 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAllEns.map((e) => (
-                  <tr key={e.id} className="hover:bg-slate-50">
+                  <tr
+                    key={e.id}
+                    className="hover:bg-slate-50 cursor-pointer"
+                    onClick={() => handleEditEns(e)}
+                    title="Cliquer sur la ligne pour modifier (remettre en haut)"
+                  >
                     <td className="px-3 py-2 font-bold">{e.nom}</td>
                     <td className="px-3 py-2">{e.prenom || "—"}</td>
                     <td className="px-3 py-2 text-xs">{e.cin || "—"}</td>
@@ -1629,10 +1668,18 @@ export default function HomePage() {
                     <td className={`px-3 py-2 text-xs max-w-[150px] truncate ${e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "text-orange-600 font-semibold" : ""}`} title={e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "RIB incohérent" : e.rib || ""}>{e.rib || "—"}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
-                        <button onClick={() => handleEditEns(e)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); handleEditEns(e); }}
+                          className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                          title="Modifier"
+                        >
                           <Edit size={14} />
                         </button>
-                        <button onClick={() => handleDeleteEns(e.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); handleDeleteEns(e.id); }}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded"
+                          title="Supprimer"
+                        >
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -1770,7 +1817,12 @@ export default function HomePage() {
                 {heuresList.map((h) => {
                   const total = (h.heuresET || 0) + (h.heuresED || 0) + (h.heuresEP || 0) + (h.heuresSoutenance || 0) + (h.heuresRecherche || 0);
                   return (
-                    <tr key={h.id} className={`hover:bg-indigo-50/50 ${editingHeureId === h.id ? "bg-yellow-50" : ""}`}>
+                    <tr
+                      key={h.id}
+                      onClick={() => handleEditHeure(h)}
+                      title="Cliquer pour remettre en haut pour modification"
+                      className={`hover:bg-indigo-50/50 cursor-pointer ${editingHeureId === h.id ? "bg-yellow-50 ring-2 ring-yellow-300" : ""}`}
+                    >
                       <td className="px-2 py-2 text-center">
                         <GradeBadge grade={h.grade?.code || "-"} />
                       </td>
@@ -1789,10 +1841,18 @@ export default function HomePage() {
                       <td className="px-1 py-2 text-center text-orange-600">{h.obligation}</td>
                       <td className="px-1 py-2 text-center">
                         <div className="flex gap-1 justify-center">
-                          <button onClick={() => handleEditHeure(h)} className="p-1 text-indigo-600 hover:bg-indigo-100 rounded">
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); handleEditHeure(h); }}
+                            className="p-1 text-indigo-600 hover:bg-indigo-100 rounded"
+                            title="Modifier (remettre en haut)"
+                          >
                             <Edit size={12} />
                           </button>
-                          <button onClick={() => handleDeleteHeures(h.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); handleDeleteHeures(h.id); }}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            title="Supprimer"
+                          >
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -2052,7 +2112,26 @@ export default function HomePage() {
           </form>
 
           <div className="max-h-[300px] overflow-x-auto rounded-lg border">
-            <table className="w-full text-xs"><thead className="sticky top-0 bg-slate-50"><tr>{["Établissement", "Domaine", "Mention", "Parcours"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{facultes.map((f) => <tr key={f.id}><td className="px-3 py-2">{f.etablissement}</td><td className="px-3 py-2">{f.domaine}</td><td className="px-3 py-2">{f.mention}</td><td className="px-3 py-2">{f.parcours || "—"}</td></tr>)}</tbody></table>
+            <p className="px-3 py-2 text-[11px] text-slate-500 bg-slate-50 border-b">💡 Astuce : cliquez sur une ligne pour remettre en haut pour modification (comme dans la saisie des heures)</p>
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50"><tr>{["Établissement", "Domaine", "Mention", "Parcours"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600">{h}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {facultes.map((f) => (
+                  <tr
+                    key={f.id}
+                    onClick={() => handleStructureRowClick(f)}
+                    className="hover:bg-purple-50 cursor-pointer transition"
+                    title="Cliquer pour remettre en haut pour modification"
+                  >
+                    <td className="px-3 py-2">{f.etablissement}</td>
+                    <td className="px-3 py-2">{f.domaine}</td>
+                    <td className="px-3 py-2">{f.mention}</td>
+                    <td className="px-3 py-2">{f.parcours || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {facultes.length === 0 && <p className="text-center py-4 text-slate-400 text-xs">Aucune structure</p>}
           </div>
         </div>
       </Modal>
