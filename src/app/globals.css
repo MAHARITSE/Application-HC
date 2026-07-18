@@ -1,5 +1,40 @@
 @import "tailwindcss";
 
+@layer base {
+  /* === Pointeur en main comme dans RECEPTION-SALFA === */
+  /* Dans RECEPTION-SALFA, chaque <button> a explicitement className="... cursor-pointer" */
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
+
+  a,
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    cursor: pointer;
+  }
+
+  /* Lignes cliquables comme dans ReceptionModule.tsx: <tr className="cursor-pointer ..."> */
+  tr.cursor-pointer,
+  tbody tr.cursor-pointer {
+    cursor: pointer;
+  }
+}
+
 @theme {
   --color-primary-50: #eff6ff;
   --color-primary-100: #dbeafe;
@@ -23,6 +58,46 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Transformation pointeur en main - Style RECEPTION-SALFA === */
+/* Reproduit exactement le comportement de RECEPTION-SALFA où tous les boutons et lignes ont cursor-pointer */
+button,
+[role="button"],
+a,
+select {
+  cursor: pointer !important;
+}
+
+/* Tous les boutons Tailwind de l'app en main */
+button:hover,
+[role="button"]:hover,
+a:hover {
+  cursor: pointer !important;
+}
+
+/* Tableaux cliquables comme dans ReceptionModule */
+table tbody tr,
+tbody tr {
+  cursor: pointer;
+}
+
+table tbody tr:hover,
+tbody tr:hover,
+tr.cursor-pointer:hover,
+tr[class*="cursor-pointer"]:hover {
+  cursor: pointer !important;
+}
+
+/* Force utile */
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Backdrop modale cliquable en main comme dans RECEPTION-SALFA */
+.bg-black\/60.backdrop-blur-sm,
+.absolute.inset-0.bg-black\/60 {
+  cursor: pointer;
 }
 
 @keyframes fadeIn {
