@@ -17,16 +17,12 @@ import {
   GraduationCap,
   Building2,
   Calendar,
-  DollarSign,
-  Clock,
   CheckCircle2,
   AlertCircle,
   CreditCard,
   Wallet,
   Download,
   Printer,
-  Shield,
-  Ticket,
 } from "lucide-react";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, formatAriary, DEFAULT_HC_FORMULA } from "@/lib/metier";
 
@@ -200,7 +196,6 @@ export default function HomePage() {
     domaine: "",
     mention: "",
     parcours: "",
-    code: "",
   });
   const [editingFacId, setEditingFacId] = useState<number | null>(null);
   const [facSuggestions, setFacSuggestions] = useState<Record<string, string[]>>({});
@@ -244,27 +239,7 @@ export default function HomePage() {
   const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
   const [batchFichesData, setBatchFichesData] = useState<any[]>([]);
 
-  // Structure académique séparée (4 niveaux) - gestion par onglets
-  const [facTab, setFacTab] = useState<"etablissements" | "domaines" | "mentions" | "parcours">("etablissements");
-  const [etabList, setEtabList] = useState<any[]>([]);
-  const [domList, setDomList] = useState<any[]>([]);
-  const [menList, setMenList] = useState<any[]>([]);
-  const [parcList, setParcList] = useState<any[]>([]);
-  const [facParentCombo, setFacParentCombo] = useState("");
 
-  // Chargement des données par niveau
-  const loadEtabList = useCallback(async () => {
-    try { const res = await fetch("/api/structures?level=etablissements"); setEtabList(await res.json()); } catch { setEtabList([]); }
-  }, []);
-  const loadDomList = useCallback(async () => {
-    try { const res = await fetch("/api/structures?level=domaines" + (facParentCombo ? `&etablissementId=${facParentCombo}` : "")); setDomList(await res.json()); } catch { setDomList([]); }
-  }, [facParentCombo]);
-  const loadMenList = useCallback(async () => {
-    try { const res = await fetch("/api/structures?level=mentions" + (facParentCombo ? `&domaineId=${facParentCombo}` : "")); setMenList(await res.json()); } catch { setMenList([]); }
-  }, [facParentCombo]);
-  const loadParcList = useCallback(async () => {
-    try { const res = await fetch("/api/structures?level=parcours" + (facParentCombo ? `&mentionId=${facParentCombo}` : "")); setParcList(await res.json()); } catch { setParcList([]); }
-  }, [facParentCombo]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const fetchDistinct = useCallback(async (field: string, q: string) => {
@@ -282,7 +257,7 @@ export default function HomePage() {
     setFacForm((f) => ({ ...f, [field]: value }));
     // Autocomplete
     if (["etablissement", "domaine", "mention", "parcours"].includes(field) && value.length >= 1) {
-      const sugg = await fetchDistinct(field, value);
+      const sugg = await fetchDistinct(field as "etablissement" | "domaine" | "mention" | "parcours", value);
       setFacSuggestions((s) => ({ ...s, [field]: sugg }));
     }
   };
@@ -432,27 +407,6 @@ export default function HomePage() {
     }),
     [filtered, calcRow, selectedAnnee]
   );
-
-  // Chargement initial des listes séparées
-  useEffect(() => {
-    loadEtabList();
-  }, [loadEtabList]);
-
-  const handleFacTabChange = (tab: "etablissements" | "domaines" | "mentions" | "parcours") => {
-    setFacTab(tab);
-    setFacParentCombo("");
-    if (tab === "domaines") { loadEtabList(); loadDomList(); }
-    if (tab === "mentions") { loadEtabList(); loadMenList(); }
-    if (tab === "parcours") { loadEtabList(); loadParcList(); }
-    if (tab === "etablissements") { loadEtabList(); }
-  };
-
-  const handleParentComboChange = (value: string) => {
-    setFacParentCombo(value);
-    if (facTab === "domaines") loadDomList();
-    if (facTab === "mentions") loadMenList();
-    if (facTab === "parcours") loadParcList();
-  };
 
   // ── Handlers Enseignant Base (sans grade/statut) ───────────────────────────
   const handleAddEns = () => {
@@ -882,7 +836,7 @@ export default function HomePage() {
         setFacError(err.error || "Erreur");
         return;
       }
-      setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", code: "" });
+      setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" });
       setEditingFacId(null);
       setFacSuggestions({});
       loadFacultes();
@@ -898,7 +852,6 @@ export default function HomePage() {
       domaine: f.domaine || "",
       mention: f.mention || "",
       parcours: f.parcours || "",
-      code: f.code || "",
     });
     setFacError("");
   };
@@ -1106,20 +1059,6 @@ export default function HomePage() {
                   <Download size={16} /> Excel
                 </button>
               )}
-              <a
-                href="/impression/ticket"
-                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition shadow-sm"
-                title="Tickets imprimables"
-              >
-                <Ticket size={16} /> Tickets
-              </a>
-              <a
-                href="/admin"
-                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition shadow-sm"
-                title="Administration"
-              >
-                <Shield size={16} /> Admin
-              </a>
             </div>
           </div>
         </div>
@@ -1953,179 +1892,53 @@ export default function HomePage() {
         {ficheData && <FicheIndividuelle data={ficheData as any} />}
       </Modal>
 
-      {/* Modal Structure académique - quatre bases liées */}
-       <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)} title="🏛️ Structure Académique" size="2xl">
-
+      {/* Modal Structure académique */}
+      <Modal isOpen={showFacModal} onClose={() => { setShowFacModal(false); setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); setFacError(""); }} title="🏛️ Structure Académique" size="xl">
         <div className="space-y-4">
-          {/* Navigation par onglets */}
-          <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 border border-slate-200">
-            {[
-              { id: "etablissements" as const, label: "Établissements", icon: "🏛️" },
-              { id: "domaines" as const, label: "Domaines", icon: "📚" },
-              { id: "mentions" as const, label: "Mentions", icon: "📖" },
-              { id: "parcours" as const, label: "Parcours", icon: "🗺️" },
-            ].map((t: any) => (
-              <button
-                key={t.id}
-                onClick={() => handleFacTabChange(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                  facTab === t.id
-                    ? "bg-white text-purple-700 shadow-sm border border-purple-200"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-white/60"
-                }`}
-              >
-                <span>{t.icon}</span> {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs">
-            <p className="font-semibold text-purple-900">Structure normalisée séparée (4 niveaux)</p>
-            <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
-              <li><strong>Établissement</strong> : base indépendante</li>
-              <li><strong>Domaine</strong> : combo faculté obligatoire</li>
-              <li><strong>Mention</strong> : combo domaine obligatoire</li>
-              <li><strong>Parcours</strong> : combo mention obligatoire</li>
-            </ul>
-          </div>
-
-          {/* Établissements */}
-          <div className={`${facTab === "etablissements" ? "block" : "hidden"} space-y-3`}>
-            <h4 className="font-bold text-sm text-slate-800">🏛️ Établissements</h4>
-            <p className="text-xs text-slate-500">Aucun parent requis.</p>
-            <form onSubmit={async (e: React.FormEvent) => { e.preventDefault(); const val = (e.target as any).etablissement_input?.value?.trim(); if (!val) return; try { await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ etablissement: val, domaine: "—", mention: "—", parcours: null, code: null }) }); (e.target as any).reset(); loadEtabList(); loadFacultes(); } catch { } }} className="bg-white rounded-lg border border-purple-200 p-3 space-y-2">
-              <div className="flex gap-2">
-                <input name="etablissement_input" placeholder="Nom de l'établissement" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <button type="submit" className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">Ajouter</button>
+          <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Établissement *</label>
+                <input value={facForm.etablissement} onChange={(e) => handleFacFieldChange("etablissement", e.target.value)} list="etablissement-list" required placeholder="Ex: Université de Toliara" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
+                <datalist id="etablissement-list">{facSuggestions.etablissement?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
               </div>
-            </form>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[200px]">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0"><tr><th className="px-2 py-2 text-left font-semibold text-slate-600">Établissement</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{etabList.map((et: any) => (<tr key={et.id} className="hover:bg-purple-50"><td className="px-2 py-2 font-medium truncate max-w-[250px]">{et.etablissement}</td></tr>))}</tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Domaines */}
-          <div className={`${facTab === "domaines" ? "block" : "hidden"} space-y-3`}>
-            <h4 className="font-bold text-sm text-slate-800">📚 Domaines</h4>
-            <p className="text-xs text-slate-500">Sélectionnez un établissement avant d'ajouter.</p>
-            <div className="bg-white rounded-lg border border-purple-200 p-3 space-y-2">
-              <label className="block text-xs font-semibold text-slate-700">Établissement *</label>
-              <select value={facParentCombo} onChange={(e) => handleParentComboChange(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
-                <option value="">-- Sélectionner --</option>
-                {etabList.map((et: any) => (<option key={et.id} value={et.id}>{et.etablissement}</option>))}
-              </select>
-            </div>
-            <form onSubmit={async (e: React.FormEvent) => { e.preventDefault(); const val = (e.target as any).domaine_input?.value?.trim(); const parent = facParentCombo; if (!val || !parent) return; const etab = etabList.find((x: any) => String(x.id) === String(parent)); if (!etab) return; try { await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ etablissement: etab.etablissement, domaine: val, mention: "—", parcours: null, code: null }) }); (e.target as any).reset(); loadDomList(); loadFacultes(); } catch { } }} className="bg-white rounded-lg border border-purple-200 p-3 flex gap-2">
-              <input name="domaine_input" placeholder="Nom du domaine" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-              <button type="submit" disabled={!facParentCombo} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40">Ajouter</button>
-            </form>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[200px]">
-              <table className="w-full text-xs"><thead className="bg-slate-50 sticky top-0"><tr><th className="px-2 py-2 text-left font-semibold text-slate-600">Établissement</th><th className="px-2 py-2 text-left font-semibold text-slate-600">Domaine</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">{domList.map((d: any) => { const etab = etabList.find((e: any) => String(e.id) === String(d.etablissementId)); return (<tr key={d.id} className="hover:bg-purple-50"><td className="px-2 py-2 truncate max-w-[150px]">{etab?.etablissement || d.etablissementId}</td><td className="px-2 py-2 font-medium truncate max-w-[150px]">{d.domaine}</td></tr>); })}</tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Mentions */}
-          <div className={`${facTab === "mentions" ? "block" : "hidden"} space-y-3`}>
-            <h4 className="font-bold text-sm text-slate-800">📖 Mentions</h4>
-            <p className="text-xs text-slate-500">Sélectionnez un domaine avant d'ajouter.</p>
-            <div className="bg-white rounded-lg border border-purple-200 p-3 space-y-2">
-              <label className="block text-xs font-semibold text-slate-700">Domaine *</label>
-              <select value={facParentCombo} onChange={(e) => handleParentComboChange(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
-                <option value="">-- Sélectionner --</option>
-                {domList.map((d: any) => { const etab = etabList.find((e: any) => String(e.id) === String(d.etablissementId)); return (<option key={d.id} value={d.id}>{(etab ? etab.etablissement + " - " : "") + d.domaine}</option>); })}
-              </select>
-            </div>
-            <form onSubmit={async (e: React.FormEvent) => { e.preventDefault(); const val = (e.target as any).mention_input?.value?.trim(); const parent = facParentCombo; if (!val || !parent) return; const dom = domList.find((x: any) => String(x.id) === String(parent)); if (!dom) return; const etab = etabList.find((e: any) => String(e.id) === String(dom.etablissementId)); if (!etab) return; try { await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ etablissement: etab.etablissement, domaine: dom.domaine, mention: val, parcours: null, code: null }) }); (e.target as any).reset(); loadMenList(); loadFacultes(); } catch { } }} className="bg-white rounded-lg border border-purple-200 p-3 flex gap-2">
-              <input name="mention_input" placeholder="Nom de la mention" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-              <button type="submit" disabled={!facParentCombo} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40">Ajouter</button>
-            </form>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[200px]">
-              <table className="w-full text-xs"><thead className="bg-slate-50 sticky top-0"><tr><th className="px-2 py-2 text-left font-semibold text-slate-600">Domaine</th><th className="px-2 py-2 text-left font-semibold text-slate-600">Mention</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">{menList.map((m: any) => { const dom = domList.find((d: any) => String(d.id) === String(m.domaineId)); const etab = dom ? etabList.find((e: any) => String(e.id) === String(dom.etablissementId)) : null; return (<tr key={m.id} className="hover:bg-purple-50"><td className="px-2 py-2 truncate max-w-[150px]">{dom ? (etab ? etab.etablissement + " - " : "") + dom.domaine : m.domaineId}</td><td className="px-2 py-2 font-medium truncate max-w-[150px]">{m.mention}</td></tr>); })}</tbody></table>
-            </div>
-          </div>
-
-          {/* Parcours */}
-          <div className={`${facTab === "parcours" ? "block" : "hidden"} space-y-3`}>
-            <h4 className="font-bold text-sm text-slate-800">🗺️ Parcours</h4>
-            <p className="text-xs text-slate-500">Sélectionnez une mention avant d'ajouter un parcours.</p>
-            <div className="bg-white rounded-lg border border-purple-200 p-3 space-y-2">
-              <label className="block text-xs font-semibold text-slate-700">Mention *</label>
-              <select value={facParentCombo} onChange={(e) => handleParentComboChange(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
-                <option value="">-- Sélectionner --</option>
-                {menList.map((m: any) => { const dom = domList.find((d: any) => String(d.id) === String(m.domaineId)); const etab = dom ? etabList.find((e: any) => String(e.id) === String(dom.etablissementId)) : null; return (<option key={m.id} value={m.id}>{(etab ? etab.etablissement + " - " : "") + (dom ? dom.domaine + " - " : "") + m.mention}</option>); })}
-              </select>
-            </div>
-            <form onSubmit={async (e: React.FormEvent) => { e.preventDefault(); const valPar = (e.target as any).parcours_input?.value?.trim(); const valCode = (e.target as any).code_input?.value?.trim(); const parent = facParentCombo; if (!parent) return; const men = menList.find((x: any) => String(x.id) === String(parent)); if (!men) return; const dom = domList.find((d: any) => String(d.id) === String(men.domaineId)); const etab = dom ? etabList.find((e: any) => String(e.id) === String(dom.etablissementId)) : null; if (!etab) return; try { await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ etablissement: etab.etablissement, domaine: dom.domaine, mention: men.mention, parcours: valPar || null, code: valCode || null }) }); (e.target as any).reset(); loadParcList(); loadFacultes(); } catch { } }} className="bg-white rounded-lg border border-purple-200 p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <input name="parcours_input" placeholder="Parcours (optionnel)" className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-              <input name="code_input" placeholder="Code (optionnel)" className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-              <button type="submit" disabled={!facParentCombo} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-40 flex items-center justify-center gap-1"><Plus size={14}/> Ajouter parcours</button>
-            </form>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[200px]">
-              <table className="w-full text-xs"><thead className="bg-slate-50 sticky top-0"><tr><th className="px-2 py-2 text-left font-semibold text-slate-600">Mention</th><th className="px-2 py-2 text-left font-semibold text-slate-600">Parcours</th><th className="px-2 py-2 text-left font-semibold text-slate-600">Code</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">{parcList.map((p: any) => { const men = menList.find((m: any) => String(m.id) === String(p.mentionId)); const dom = men ? domList.find((d: any) => String(d.id) === String(men.domaineId)) : null; const etab = dom ? etabList.find((e: any) => String(e.id) === String(dom.etablissementId)) : null; return (<tr key={p.id} className="hover:bg-purple-50"><td className="px-2 py-2 truncate max-w-[150px]">{men ? (etab ? etab.etablissement + " - " : "") + (dom ? dom.domaine + " - " : "") + men.mention : p.mentionId}</td><td className="px-2 py-2 font-medium truncate max-w-[150px]">{p.parcours || "—"}</td><td className="px-2 py-2 text-[10px] font-mono">{p.code || "—"}</td></tr>); })}</tbody></table>
-            </div>
-          </div>
-
-          {/* Formulaire complet (pour la compatibilité arrière) */}
-          <div className="border-t border-slate-200 pt-4">
-            <h4 className="font-semibold text-slate-700 mb-3">Ou ajouter une structure complète (tous les niveaux)</h4>
-            <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Établissement *</label>
-                  <input value={facForm.etablissement} onChange={(e) => handleFacFieldChange("etablissement", e.target.value)} list="etablissement-list-full" required placeholder="Ex: Université de Toliara" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                  <datalist id="etablissement-list-full">{facSuggestions.etablissement?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-                </div>
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Domaine *</label>
-                  <input value={facForm.domaine} onChange={(e) => handleFacFieldChange("domaine", e.target.value)} list="domaine-list-full" required placeholder="Ex: Sciences et Technologies" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                  <datalist id="domaine-list-full">{facSuggestions.domaine?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-                </div>
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mention *</label>
-                  <input value={facForm.mention} onChange={(e) => handleFacFieldChange("mention", e.target.value)} list="mention-list-full" required placeholder="Ex: Informatique" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                  <datalist id="mention-list-full">{facSuggestions.mention?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (optionnel)</label>
-                  <input value={facForm.parcours} onChange={(e) => handleFacFieldChange("parcours", e.target.value)} list="parcours-list-full" placeholder="Ex: Génie Logiciel" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                  <datalist id="parcours-list-full">{facSuggestions.parcours?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Code (optionnel)</label>
-                  <input value={facForm.code} onChange={(e) => setFacForm({ ...facForm, code: e.target.value })} placeholder="Ex: UT-ST-INFO-GL" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                </div>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Domaine *</label>
+                <input value={facForm.domaine} onChange={(e) => handleFacFieldChange("domaine", e.target.value)} list="domaine-list" required placeholder="Ex: Sciences et Technologies" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
+                <datalist id="domaine-list">{facSuggestions.domaine?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
               </div>
-              {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
-              <div className="flex gap-2">
-                <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"><Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter la structure complète"}</button>
-                {editingFacId && (<button type="button" onClick={() => { setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "", code: "" }); }} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white">Annuler édition</button>)}
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Mention *</label>
+                <input value={facForm.mention} onChange={(e) => handleFacFieldChange("mention", e.target.value)} list="mention-list" required placeholder="Ex: Informatique" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
+                <datalist id="mention-list">{facSuggestions.mention?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
               </div>
-            </form>
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (optionnel)</label>
+                <input value={facForm.parcours} onChange={(e) => handleFacFieldChange("parcours", e.target.value)} list="parcours-list" placeholder="Ex: Génie Logiciel" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
+                <datalist id="parcours-list">{facSuggestions.parcours?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+              </div>
+            </div>
+            {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
+            <div className="flex gap-2">
+              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"><Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter la structure"}</button>
+              {editingFacId && (<button type="button" onClick={() => { setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); }} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white">Annuler édition</button>)}
+            </div>
+          </form>
 
-          <div className="overflow-x-auto max-h-[300px] border rounded-lg">
+          <div className="overflow-x-auto max-h-[400px] border rounded-lg">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 sticky top-0"><tr>{["Établissement", "Domaine", "Mention", "Parcours", "Code", ""].map((h: string) => (<th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>))}</tr></thead>
+              <thead className="bg-slate-50 sticky top-0"><tr>{["Établissement", "Domaine", "Mention", "Parcours", ""].map((h: string) => (<th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>))}</tr></thead>
               <tbody className="divide-y divide-slate-100">{facultes.map((f: Faculte) => (<tr key={f.id} onClick={() => handleEditFac(f)} className={`hover:bg-purple-50 cursor-pointer ${editingFacId === f.id ? "bg-yellow-50" : ""}`}>
                 <td className="px-2 py-2 font-medium truncate max-w-[150px]">{f.etablissement}</td>
                 <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
                 <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
                 <td className="px-2 py-2">{f.parcours || "—"}</td>
-                <td className="px-2 py-2 text-[10px] font-mono">{f.code || "—"}</td>
                 <td className="px-2 py-2 text-center"><button onClick={(ev) => { ev.stopPropagation(); handleDeleteFac(f.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Supprimer"><Trash2 size={14} /></button></td>
               </tr>))}</tbody>
             </table>
           </div>
         </div>
       </Modal>
-
       {/* Modal Années */}
       <Modal isOpen={showAnneeModal} onClose={() => setShowAnneeModal(false)} title="📅 Gestion Années Universitaires (IRSA par année)" size="2xl">
         <div className="space-y-5">
