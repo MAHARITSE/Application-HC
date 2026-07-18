@@ -89,6 +89,7 @@ export interface Enseignant {
   specialite: string | null;
   etablissementPrincipal: string | null;
   dateRecrutement: string | null;
+  gradeId?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

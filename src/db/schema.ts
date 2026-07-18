@@ -81,6 +81,7 @@ export const enseignants = pgTable("enseignants", {
   specialite: varchar("specialite", { length: 200 }),
   etablissementPrincipal: varchar("etablissement_principal", { length: 200 }),
   dateRecrutement: date("date_recrutement"),
+  gradeId: integer("grade_id").references(() => grades.id), // Grade AU MOMENT de la saisie (base enseignant)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -44,6 +44,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.specialite !== undefined) updateData.specialite = body.specialite?.trim() || null;
     if (body.etablissementPrincipal !== undefined) updateData.etablissementPrincipal = body.etablissementPrincipal?.trim() || null;
     if (body.dateRecrutement !== undefined) updateData.dateRecrutement = body.dateRecrutement || null;
+    if (body.gradeId !== undefined) updateData.gradeId = body.gradeId ? Number(body.gradeId) : null;
 
     if (body.nomPrenom && !body.nom) {
       const parts = body.nomPrenom.trim().split(/\s+/);
