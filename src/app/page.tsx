@@ -1954,7 +1954,7 @@ export default function HomePage() {
       </Modal>
 
       {/* Modal Structure académique - quatre bases liées */}
-      <Modal isOpen={showFacModal} onClose={() => 
+       <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)} title="🏛️ Structure Académique" size="2xl">
 
         <div className="space-y-4">
           {/* Navigation par onglets */}
