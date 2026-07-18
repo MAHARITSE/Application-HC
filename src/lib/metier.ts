@@ -107,7 +107,7 @@ export function calcHCNette(
  * HC Arrondie = ARRONDI(HC Brut - Obligation; 0)
  */
 export function calcHCArrondie(hcNette: number): number {
-  return Math.round(hcNette || 0);
+  return Math.floor(hcNette || 0);
 }
 
 /**
