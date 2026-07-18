@@ -25,6 +25,8 @@ import {
   Wallet,
   Download,
   Printer,
+  Shield,
+  Ticket,
 } from "lucide-react";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, formatAriary, DEFAULT_HC_FORMULA } from "@/lib/metier";
 
@@ -1061,6 +1063,20 @@ export default function HomePage() {
                   <Download size={16} /> Excel
                 </button>
               )}
+              <a
+                href="/impression/ticket"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition shadow-sm"
+                title="Tickets imprimables"
+              >
+                <Ticket size={16} /> Tickets
+              </a>
+              <a
+                href="/admin"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition shadow-sm"
+                title="Administration"
+              >
+                <Shield size={16} /> Admin
+              </a>
             </div>
           </div>
         </div>
