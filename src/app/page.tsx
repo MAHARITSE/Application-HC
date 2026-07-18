@@ -104,6 +104,9 @@ interface EnseignantBase {
   lieuNaissance?: string | null;
   dateRecrutement?: string | null;
   dateCIN?: string | null;
+  gradeId?: number | null;
+  gradeCode?: string | null;
+  gradeLibelle?: string | null;
 }
 
 interface HeureDetail {
@@ -1510,6 +1513,7 @@ export default function HomePage() {
               : undefined
           }
           etablissements={Array.from(new Set(facultes.map((f) => f.etablissement).filter(Boolean))).sort()}
+          grades={grades}
           onSave={handleSaveEns}
           onCancel={() => {
             setShowEnsModal(false);

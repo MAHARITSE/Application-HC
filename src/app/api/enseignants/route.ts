@@ -200,6 +200,21 @@ export async function POST(request: Request) {
 
     const adresse = body.adresse ? toTitleCase(body.adresse) : null;
 
+    // Vérification anti-répétition : nom + prenom + cin
+    const existing = getEnseignants();
+    const cinNorm = (body.cin || "").trim().replace(/\s+/g, "");
+    const duplicate = existing.find((e) => {
+      const eNom = (e.nom || "").toUpperCase();
+      const ePrenom = (e.prenom || "").toUpperCase();
+      const eCin = (e.cin || "").trim().replace(/\s+/g, "");
+      const n = nom.toUpperCase();
+      const p = (prenom || "").toUpperCase();
+      return eNom === n && ePrenom === p && (cinNorm ? eCin === cinNorm : false);
+    });
+    if (duplicate) {
+      return NextResponse.json({ error: "Un enseignant avec ce nom, prénom et CIN existe déjà (id: " + duplicate.id + ")" }, { status: 409 });
+    }
+
     const newEns = createEnseignant({
       nom,
       prenom,
@@ -215,6 +230,7 @@ export async function POST(request: Request) {
       specialite: body.specialite?.trim() || null,
       etablissementPrincipal: body.etablissementPrincipal?.trim() || null,
       dateRecrutement: body.dateRecrutement || null,
+      gradeId: body.gradeId ? Number(body.gradeId) : null,
     });
 
     return NextResponse.json(newEns);

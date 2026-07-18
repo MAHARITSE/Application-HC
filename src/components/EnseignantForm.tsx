@@ -17,11 +17,13 @@ interface EnseignantFormData {
   specialite: string;
   etablissementPrincipal: string;
   dateRecrutement: string;
+  gradeId: string; // Grade au moment de la saisie
 }
 
 interface Props {
   initialData?: Partial<EnseignantFormData>;
   etablissements?: string[];
+  grades?: Array<{ id: number; code: string; libelle: string }>;
   onSave: (data: EnseignantFormData) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
@@ -42,6 +44,7 @@ const EMPTY: EnseignantFormData = {
   specialite: "",
   etablissementPrincipal: "",
   dateRecrutement: "",
+  gradeId: "",
 };
 
 export default function EnseignantForm({ initialData, etablissements = [], onSave, onCancel, loading }: Props) {
@@ -158,6 +161,22 @@ export default function EnseignantForm({ initialData, etablissements = [], onSav
           <div>
             <label className={labelClass}>Date de recrutement</label>
             <input type="date" value={form.dateRecrutement} onChange={(e) => set("dateRecrutement", e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Grade au moment de la saisie (base enseignant)</label>
+            <select
+              value={form.gradeId || ""}
+              onChange={(e) => set("gradeId", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">-- Sélectionner --</option>
+              {(grades || []).map((g: any) => (
+                <option key={g.id} value={g.id}>
+                  {g.code} - {g.libelle}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-400 mt-1">Grade stocké dans la base enseignant pour éviter de préciser à chaque HC</p>
           </div>
         </div>
 
