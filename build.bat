@@ -1,42 +1,50 @@
 @echo off
 title Build Application-HC
 cls
+setlocal
 
 echo ===================================================
-echo   COMPILATION ET PREPARATION DU DEPLOIEMENT
+echo   COMPILATION DE L'APPLICATION
 echo ===================================================
 echo.
 
-:: 1. Se positionne automatiquement dans le dossier du script
+:: Se positionne automatiquement dans le dossier du script
 cd /d "%~dp0"
 
-:: 2. Nettoyage de l'ancien build
-if exist dist (
-    echo [1/4] Nettoyage du dossier 'dist' existant...
-    rmdir /s /q dist
+:: Next.js utilise .next pour son build (pas dist)
+if exist .next (
+    echo [1/3] Nettoyage de l'ancien build '.next'...
+    rmdir /s /q .next
 )
 
-:: 3. Verification des dependances
-echo [2/4] Verification des dependances (npm install)...
+:: Installation des dependances
+echo [2/3] Installation des dependances (npm install)...
 call npm install
+if errorlevel 1 (
+    echo.
+    echo [ERREUR] L'installation des dependances a echoue.
+    pause
+    exit /b 1
+)
 
-:: 4. Compilation de l'application
-echo [3/4] Production du build de l'application (npm run build)...
+:: Compilation de l'application
+echo [3/3] Production du build Next.js (npm run build)...
 call npm run build
-
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo.
     echo [ERREUR] La compilation a echoue. Verifiez les erreurs ci-dessus.
     pause
-    exit /b %ERRORLEVEL%
+    exit /b 1
 )
 
-:: 5. Finalisation
 echo.
 echo ===================================================
 echo [SUCCES] Compilation terminee !
-echo Le contenu du dossier 'dist' est pret a etre deploye.
+echo Le build se trouve dans '.next' (et non dans 'dist').
+echo Netlify le gere automatiquement via netlify.toml.
+echo Pour deployer : npx netlify deploy --prod
 echo ===================================================
 echo.
 
 pause
+endlocal
