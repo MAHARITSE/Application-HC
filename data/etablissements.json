@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "etablissement": "Université de Toliara"
+  },
+  {
+    "id": 2,
+    "etablissement": "ENS Toliara"
+  },
+  {
+    "id": 3,
+    "etablissement": "IHSM"
+  },
+  {
+    "id": 4,
+    "etablissement": "IES-Menabe"
+  },
+  {
+    "id": 5,
+    "etablissement": "SCIENCES"
+  },
+  {
+    "id": 6,
+    "etablissement": "Fac Lettres"
+  },
+  {
+    "id": 7,
+    "etablissement": "IES-Toliara"
+  },
+  {
+    "id": 8,
+    "etablissement": "IES-ANOSY"
+  },
+  {
+    "id": 9,
+    "etablissement": "DEGS"
+  },
+  {
+    "id": 10,
+    "etablissement": "CURA"
+  },
+  {
+    "id": 11,
+    "etablissement": "ENS"
+  },
+  {
+    "id": 12,
+    "etablissement": "MEDECINE"
+  }
+]

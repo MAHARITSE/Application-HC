@@ -4,7 +4,7 @@ import {
   getHeures,
   getEnseignants,
   getGrades,
-  getFacultes,
+  getStructures,
   getPaiements,
 } from "@/db";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA } from "@/lib/metier";
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       heure: h,
       enseignant: getEnseignants().find((e) => e.id === h.enseignantId),
       grade: h.gradeId ? getGrades().find((g) => g.id === h.gradeId) : null,
-      faculte: h.faculteId ? getFacultes().find((f) => f.id === h.faculteId) : null,
+      structure: h.parcoursId ? getStructures().find((f) => f.id === h.parcoursId) : null,
     }))
     .filter((row) => row.enseignant); // only valid
 
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         dernierGrade: null,
         dernierStatut: "Vacataire",
         derniereObligation: 125,
-        facultes: new Set<string>(),
+        structures: new Set<string>(),
       });
     }
     const cur = map.get(eid);
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     if (row.grade) cur.dernierGrade = row.grade;
     if (row.heure.statut) cur.dernierStatut = row.heure.statut;
     if (row.heure.obligation != null) cur.derniereObligation = row.heure.obligation;
-    if (row.faculte?.etablissement) cur.facultes.add(row.faculte.etablissement);
+    if (row.structure?.etablissement) cur.structures.add(row.structure.etablissement);
   }
 
   const data = Array.from(map.values()).map((entry, idx) => {
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
       grade: entry.dernierGrade?.code || "",
       gradeLibelle: entry.dernierGrade?.libelle || "",
       taux,
-      etablissement: entry.enseignant.etablissementPrincipal || Array.from(entry.facultes).join(", "),
+      etablissement: entry.enseignant.etablissementPrincipal || Array.from(entry.structures).join(", "),
       et: entry.totalET,
       ed: entry.totalED,
       ep: entry.totalEP,

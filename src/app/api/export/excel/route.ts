@@ -5,7 +5,7 @@ import {
   getHeures,
   getEnseignants,
   getGrades,
-  getFacultes,
+  getStructures,
   getPaiements,
 } from "@/db";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA } from "@/lib/metier";
@@ -26,13 +26,13 @@ export async function GET(request: Request) {
 
     const enseignantsList = getEnseignants();
     const gradesList = getGrades();
-    const facultesList = getFacultes();
+    const facultesList = getStructures();
 
     const heuresData = heuresList.map((h) => ({
       heure: h,
       enseignant: enseignantsList.find((e) => e.id === h.enseignantId),
       grade: h.gradeId ? gradesList.find((g) => g.id === h.gradeId) : null,
-      faculte: h.faculteId ? facultesList.find((f) => f.id === h.faculteId) : null,
+      structure: h.parcoursId ? facultesList.find((f) => f.id === h.parcoursId) : null,
     })).filter((row) => row.enseignant);
 
     const paiementsData = anneeId
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
       if (row.grade) cur.dernierGrade = row.grade;
       if (row.heure.statut) cur.dernierStatut = row.heure.statut;
       if (row.heure.obligation != null) cur.derniereObligation = row.heure.obligation;
-      if (row.faculte?.etablissement) cur.etabSet.add(row.faculte.etablissement);
+      if (row.structure?.etablissement) cur.etabSet.add(row.structure.etablissement);
     }
 
     const rows = Array.from(map.values()).map((entry, idx) => {
@@ -192,7 +192,7 @@ export async function GET(request: Request) {
 
     XLSX.utils.book_append_sheet(wb, ws, "HC Export");
 
-    // Feuille 2: Détail par faculté (si nécessaire)
+    // Feuille 2: Détail par structure académique
     const detailHeaders = [
       "N°",
       "Nom et Prénoms",
@@ -224,7 +224,7 @@ export async function GET(request: Request) {
       const h = row.heure;
       const total = (h.heuresET || 0) + (h.heuresED || 0) + (h.heuresEP || 0) + (h.heuresSoutenance || 0) + (h.heuresRecherche || 0);
       const grade = row.grade?.code || "";
-      const fac = row.faculte;
+      const fac = row.structure;
       // row.enseignant is guaranteed to exist due to filter above
       const ens = row.enseignant!;
       const nomPrenom = `${ens.nom} ${ens.prenom || ""}`.trim();
@@ -262,7 +262,7 @@ export async function GET(request: Request) {
       { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
       { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 14 },
     ];
-    XLSX.utils.book_append_sheet(wb, wsDetail, "Détail par faculté");
+    XLSX.utils.book_append_sheet(wb, wsDetail, "Détail structures");
 
     // Feuille 3: Résumé / Statistiques
     const statsHeaders = ["Indicateur", "Valeur"];

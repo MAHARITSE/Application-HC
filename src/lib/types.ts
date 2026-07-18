@@ -22,7 +22,7 @@ export interface HeureAvecGrade {
   id: number;
   enseignantId: number;
   anneeId: number;
-  faculteId: number | null;
+  parcoursId: number | null;
   gradeId: number | null;
   statut: "Permanent" | "Vacataire";
   heuresET: number;
@@ -35,7 +35,7 @@ export interface HeureAvecGrade {
   gradeCode?: string | null;
   gradeLibelle?: string | null;
   tauxHoraire?: number | null;
-  faculte?: {
+  structure?: {
     id: number;
     etablissement: string;
     domaine: string;

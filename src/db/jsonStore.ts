@@ -41,6 +41,11 @@ function nextId(items: { id?: number }[]): number {
   return Math.max(0, ...items.map((i) => i.id || 0)) + 1;
 }
 
+// Une installation existante peut encore contenir data/facultes.json. La migration
+// conserve les identifiants des feuilles afin que les heures existantes restent liées
+// au bon parcours. Elle n'est exécutée qu'une fois par chargement de serveur.
+let legacyStructureMigrationChecked = false;
+
 // ───────────────────────────────────────────────────────────────────────────────
 // TYPES (simples, compatibles avec anciens types)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -64,11 +69,43 @@ export interface Grade {
   tauxHoraire: number;
 }
 
+/**
+ * Vue aplatie d'un parcours. Elle sert uniquement à l'affichage et aux listes.
+ * Les données sont persistées séparément dans etablissements, domaines, mentions
+ * et parcours afin de garantir la hiérarchie académique.
+ */
 export interface Faculte {
-  id: number;
+  id: number; // identifiant du parcours (compatibilité avec l'ancienne API)
   etablissement: string;
   domaine: string;
   mention: string;
+  parcours: string | null;
+  code: string | null;
+}
+
+/** Nom métier de la vue aplatie utilisée par l'application actuelle. */
+export type StructureAcademique = Faculte;
+
+export interface Etablissement {
+  id: number;
+  etablissement: string;
+}
+
+export interface Domaine {
+  id: number;
+  etablissementId: number;
+  domaine: string;
+}
+
+export interface Mention {
+  id: number;
+  domaineId: number;
+  mention: string;
+}
+
+export interface Parcours {
+  id: number;
+  mentionId: number;
   parcours: string | null;
   code: string | null;
 }
@@ -89,7 +126,6 @@ export interface Enseignant {
   specialite: string | null;
   etablissementPrincipal: string | null;
   dateRecrutement: string | null;
-  gradeId?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -98,7 +134,8 @@ export interface Heure {
   id: number;
   enseignantId: number;
   anneeId: number;
-  faculteId: number | null;
+  /** Référence le parcours (feuille de la hiérarchie académique). */
+  parcoursId: number | null;
   gradeId: number | null;
   statut: string;
   heuresET: number;
@@ -142,11 +179,128 @@ export function saveGrades(data: Grade[]) {
   writeJson("grades.json", data);
 }
 
-export function getFacultes(): Faculte[] {
-  return readJson<Faculte>("facultes.json");
+// ───────────────────────────────────────────────────────────────────────────────
+// Structure académique normalisée
+// Établissement → Domaine → Mention → Parcours
+// ───────────────────────────────────────────────────────────────────────────────
+
+function migrateLegacyFacultesIfNeeded() {
+  if (legacyStructureMigrationChecked) return;
+  legacyStructureMigrationChecked = true;
+
+  const hasNormalizedData = ["etablissements.json", "domaines.json", "mentions.json", "parcours.json"].some(
+    (filename) => readJson<Record<string, unknown>>(filename).length > 0
+  );
+  const legacyPath = path.join(DATA_DIR, "facultes.json");
+  if (hasNormalizedData || !fs.existsSync(legacyPath)) return;
+
+  const legacy = readJson<Faculte>("facultes.json");
+  if (legacy.length > 0) saveFacultes(legacy);
 }
+
+export function getEtablissements(): Etablissement[] {
+  migrateLegacyFacultesIfNeeded();
+  return readJson<Etablissement>("etablissements.json");
+}
+export function saveEtablissements(data: Etablissement[]) {
+  writeJson("etablissements.json", data);
+}
+
+export function getDomaines(): Domaine[] {
+  migrateLegacyFacultesIfNeeded();
+  return readJson<Domaine>("domaines.json");
+}
+export function saveDomaines(data: Domaine[]) {
+  writeJson("domaines.json", data);
+}
+
+export function getMentions(): Mention[] {
+  migrateLegacyFacultesIfNeeded();
+  return readJson<Mention>("mentions.json");
+}
+export function saveMentions(data: Mention[]) {
+  writeJson("mentions.json", data);
+}
+
+export function getParcours(): Parcours[] {
+  migrateLegacyFacultesIfNeeded();
+  return readJson<Parcours>("parcours.json");
+}
+export function saveParcours(data: Parcours[]) {
+  writeJson("parcours.json", data);
+}
+
+const sameText = (left: string | null | undefined, right: string | null | undefined) =>
+  (left || "").trim().toLocaleLowerCase("fr-FR") === (right || "").trim().toLocaleLowerCase("fr-FR");
+
+/** Retourne les parcours avec leurs parents, pour les listes et exports. */
+export function getFacultes(): Faculte[] {
+  const etablissements = getEtablissements();
+  const domaines = getDomaines();
+  const mentions = getMentions();
+
+  return getParcours()
+    .map((parcours) => {
+      const mention = mentions.find((item) => item.id === parcours.mentionId);
+      const domaine = mention ? domaines.find((item) => item.id === mention.domaineId) : undefined;
+      const etablissement = domaine ? etablissements.find((item) => item.id === domaine.etablissementId) : undefined;
+      if (!mention || !domaine || !etablissement) return null;
+      return {
+        id: parcours.id,
+        etablissement: etablissement.etablissement,
+        domaine: domaine.domaine,
+        mention: mention.mention,
+        parcours: parcours.parcours,
+        code: parcours.code,
+      };
+    })
+    .filter((item): item is Faculte => item !== null);
+}
+
+/**
+ * Point de compatibilité avec les anciens appels de seed : transforme une liste
+ * aplatie en quatre fichiers relationnels. Aucun fichier facultes.json n'est créé.
+ */
 export function saveFacultes(data: Faculte[]) {
-  writeJson("facultes.json", data);
+  const etablissements: Etablissement[] = [];
+  const domaines: Domaine[] = [];
+  const mentions: Mention[] = [];
+  const parcours: Parcours[] = [];
+
+  for (const item of data) {
+    const etablissement =
+      etablissements.find((x) => sameText(x.etablissement, item.etablissement)) ||
+      (() => {
+        const created = { id: nextId(etablissements), etablissement: item.etablissement.trim() };
+        etablissements.push(created);
+        return created;
+      })();
+    const domaine =
+      domaines.find((x) => x.etablissementId === etablissement.id && sameText(x.domaine, item.domaine)) ||
+      (() => {
+        const created = { id: nextId(domaines), etablissementId: etablissement.id, domaine: item.domaine.trim() };
+        domaines.push(created);
+        return created;
+      })();
+    const mention =
+      mentions.find((x) => x.domaineId === domaine.id && sameText(x.mention, item.mention)) ||
+      (() => {
+        const created = { id: nextId(mentions), domaineId: domaine.id, mention: item.mention.trim() };
+        mentions.push(created);
+        return created;
+      })();
+    parcours.push({
+      id: item.id,
+      mentionId: mention.id,
+      parcours: item.parcours?.trim() || null,
+      code: item.code?.trim() || null,
+    });
+  }
+
+  saveEtablissements(etablissements);
+  saveDomaines(domaines);
+  saveMentions(mentions);
+  saveParcours(parcours);
 }
 
 export function getEnseignants(): Enseignant[] {
@@ -157,7 +311,19 @@ export function saveEnseignants(data: Enseignant[]) {
 }
 
 export function getHeures(): Heure[] {
-  return readJson<Heure>("heures.json");
+  // Migration automatique de l'ancienne clé faculteId vers parcoursId.
+  const list = readJson<(Heure & { faculteId?: number | null })>("heures.json");
+  let migrated = false;
+  const normalized = list.map((item) => {
+    if (item.parcoursId === undefined && item.faculteId !== undefined) {
+      const { faculteId, ...rest } = item;
+      migrated = true;
+      return { ...rest, parcoursId: faculteId };
+    }
+    return item;
+  });
+  if (migrated) writeJson("heures.json", normalized);
+  return normalized;
 }
 export function saveHeures(data: Heure[]) {
   writeJson("heures.json", data);
@@ -217,27 +383,98 @@ export function updateGrade(id: number, data: Partial<Grade>): Grade | null {
   return list[idx];
 }
 
-export function createFaculte(data: Omit<Faculte, "id">): Faculte {
-  const list = getFacultes();
-  const newItem: Faculte = { id: nextId(list), ...data };
-  list.push(newItem);
-  saveFacultes(list);
-  return newItem;
+function findOrCreateHierarchy(data: Pick<Faculte, "etablissement" | "domaine" | "mention">) {
+  const etablissements = getEtablissements();
+  const domaines = getDomaines();
+  const mentions = getMentions();
+
+  let etablissement = etablissements.find((item) => sameText(item.etablissement, data.etablissement));
+  if (!etablissement) {
+    etablissement = { id: nextId(etablissements), etablissement: data.etablissement.trim() };
+    etablissements.push(etablissement);
+  }
+
+  let domaine = domaines.find(
+    (item) => item.etablissementId === etablissement!.id && sameText(item.domaine, data.domaine)
+  );
+  if (!domaine) {
+    domaine = { id: nextId(domaines), etablissementId: etablissement.id, domaine: data.domaine.trim() };
+    domaines.push(domaine);
+  }
+
+  let mention = mentions.find(
+    (item) => item.domaineId === domaine!.id && sameText(item.mention, data.mention)
+  );
+  if (!mention) {
+    mention = { id: nextId(mentions), domaineId: domaine.id, mention: data.mention.trim() };
+    mentions.push(mention);
+  }
+
+  saveEtablissements(etablissements);
+  saveDomaines(domaines);
+  saveMentions(mentions);
+  return mention;
 }
 
+/** Ajoute une feuille de hiérarchie en créant ses parents si nécessaire. */
+export function createFaculte(data: Omit<Faculte, "id">): Faculte {
+  const mention = findOrCreateHierarchy(data);
+  const list = getParcours();
+  const duplicate = list.some(
+    (item) => item.mentionId === mention.id && sameText(item.parcours, data.parcours || null)
+  );
+  if (duplicate) {
+    throw new Error("Cette structure académique existe déjà");
+  }
+  const newItem: Parcours = {
+    id: nextId(list),
+    mentionId: mention.id,
+    parcours: data.parcours?.trim() || null,
+    code: data.code?.trim() || null,
+  };
+  list.push(newItem);
+  saveParcours(list);
+  return getFacultes().find((item) => item.id === newItem.id)!;
+}
+
+/** Réaffecte une feuille à la hiérarchie demandée, sans dupliquer les parents. */
 export function updateFaculte(id: number, data: Partial<Faculte>): Faculte | null {
-  const list = getFacultes();
-  const idx = list.findIndex((x) => x.id === id);
-  if (idx === -1) return null;
-  list[idx] = { ...list[idx], ...data };
-  saveFacultes(list);
-  return list[idx];
+  const current = getFacultes().find((item) => item.id === id);
+  if (!current) return null;
+  const next = { ...current, ...data, id };
+  const mention = findOrCreateHierarchy(next);
+  const list = getParcours();
+  const index = list.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  const duplicate = list.some(
+    (item) => item.id !== id && item.mentionId === mention.id && sameText(item.parcours, next.parcours || null)
+  );
+  if (duplicate) throw new Error("Cette structure académique existe déjà");
+  list[index] = {
+    ...list[index],
+    mentionId: mention.id,
+    parcours: next.parcours?.trim() || null,
+    code: next.code?.trim() || null,
+  };
+  saveParcours(list);
+  return getFacultes().find((item) => item.id === id)!;
 }
 
 export function deleteFaculte(id: number) {
-  const list = getFacultes().filter((x) => x.id !== id);
-  saveFacultes(list);
+  if (getHeures().some((item) => item.parcoursId === id)) {
+    throw new Error("Cette structure est utilisée dans des heures et ne peut pas être supprimée.");
+  }
+  const list = getParcours().filter((item) => item.id !== id);
+  saveParcours(list);
 }
+
+// Noms utilisés par la nouvelle application. Les alias « Faculte » restent
+// uniquement pour que les intégrations historiques puissent migrer sans rupture.
+export const getStructures = getFacultes;
+export const saveStructures = saveFacultes;
+export const createStructure = createFaculte;
+export const updateStructure = updateFaculte;
+export const deleteStructure = deleteFaculte;
 
 export function createEnseignant(data: Omit<Enseignant, "id">): Enseignant {
   const list = getEnseignants();

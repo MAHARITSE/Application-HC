@@ -1,0 +1,137 @@
+[
+  {
+    "id": 1,
+    "domaineId": 1,
+    "mention": "Informatique"
+  },
+  {
+    "id": 2,
+    "domaineId": 1,
+    "mention": "Mathématiques"
+  },
+  {
+    "id": 3,
+    "domaineId": 2,
+    "mention": "Lettres Modernes"
+  },
+  {
+    "id": 4,
+    "domaineId": 1,
+    "mention": "Génie Civil"
+  },
+  {
+    "id": 5,
+    "domaineId": 3,
+    "mention": "Sciences Physiques"
+  },
+  {
+    "id": 6,
+    "domaineId": 4,
+    "mention": "Oceanographie"
+  },
+  {
+    "id": 7,
+    "domaineId": 5,
+    "mention": "Droit Public"
+  },
+  {
+    "id": 8,
+    "domaineId": 6,
+    "mention": "Technique de l'Environnement"
+  },
+  {
+    "id": 9,
+    "domaineId": 7,
+    "mention": "Sciences de la Vie"
+  },
+  {
+    "id": 10,
+    "domaineId": 8,
+    "mention": "Etude Francçaise et francophones"
+  },
+  {
+    "id": 11,
+    "domaineId": 9,
+    "mention": "Agronomie"
+  },
+  {
+    "id": 12,
+    "domaineId": 10,
+    "mention": "Géographie"
+  },
+  {
+    "id": 13,
+    "domaineId": 11,
+    "mention": "chimie"
+  },
+  {
+    "id": 14,
+    "domaineId": 12,
+    "mention": "Physique et Applications"
+  },
+  {
+    "id": 15,
+    "domaineId": 13,
+    "mention": "Technique de l'environnement marin et terrestre"
+  },
+  {
+    "id": 16,
+    "domaineId": 14,
+    "mention": "Gestion"
+  },
+  {
+    "id": 17,
+    "domaineId": 15,
+    "mention": "Droit"
+  },
+  {
+    "id": 18,
+    "domaineId": 16,
+    "mention": "Malagasy"
+  },
+  {
+    "id": 19,
+    "domaineId": 17,
+    "mention": "Arts, lettres et sciences humaines"
+  },
+  {
+    "id": 20,
+    "domaineId": 18,
+    "mention": "Metiers de L'enseignement des Lettres"
+  },
+  {
+    "id": 21,
+    "domaineId": 19,
+    "mention": "Philosophie"
+  },
+  {
+    "id": 22,
+    "domaineId": 20,
+    "mention": "Biodiversité"
+  },
+  {
+    "id": 23,
+    "domaineId": 21,
+    "mention": "Sciences de Santé"
+  },
+  {
+    "id": 24,
+    "domaineId": 22,
+    "mention": "Sciences, Technologie et Environnement"
+  },
+  {
+    "id": 25,
+    "domaineId": 23,
+    "mention": "Histoire"
+  },
+  {
+    "id": 26,
+    "domaineId": 24,
+    "mention": "Sciences de la terre"
+  },
+  {
+    "id": 27,
+    "domaineId": 25,
+    "mention": "Sciences Marine et Halieutiques"
+  }
+]

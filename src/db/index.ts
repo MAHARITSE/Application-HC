@@ -11,6 +11,22 @@ export const {
   saveAnnees,
   getGrades,
   saveGrades,
+  // Structure académique normalisée : Établissement → Domaine → Mention → Parcours
+  getEtablissements,
+  saveEtablissements,
+  getDomaines,
+  saveDomaines,
+  getMentions,
+  saveMentions,
+  getParcours,
+  saveParcours,
+  // Vue aplatie réservée aux listes et exports de l'application actuelle.
+  getStructures,
+  saveStructures,
+  createStructure,
+  updateStructure,
+  deleteStructure,
+  // Alias historiques : conservés pour les migrations externes.
   getFacultes,
   saveFacultes,
   getEnseignants,
@@ -41,7 +57,19 @@ export const {
 } = jsonStore;
 
 // Types
-export type { Annee, Grade, Faculte, Enseignant, Heure, Paiement } from "./jsonStore";
+export type {
+  Annee,
+  Grade,
+  Faculte,
+  StructureAcademique,
+  Etablissement,
+  Domaine,
+  Mention,
+  Parcours,
+  Enseignant,
+  Heure,
+  Paiement,
+} from "./jsonStore";
 
 // Pour compatibilité avec l'ancien code qui fait `import { db } from "@/db"`
 // On fournit un stub qui redirige vers jsonStore (on ne l'utilise plus directement)
