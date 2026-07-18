@@ -86,7 +86,6 @@ export const parcours = pgTable(
       .references(() => mentions.id, { onDelete: "cascade" }),
     // Facultatif : une mention peut être sélectionnée sans parcours spécifique.
     parcours: varchar("parcours", { length: 200 }),
-    code: varchar("code", { length: 20 }),
   },
   (table) => ({
     uniqueParcoursParMention: uniqueIndex("uniq_parcours_mention").on(table.mentionId, table.parcours),

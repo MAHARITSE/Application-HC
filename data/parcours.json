@@ -2,175 +2,146 @@
   {
     "id": 1,
     "mentionId": 1,
-    "parcours": "Génie Logiciel",
-    "code": "UT-ST-INFO-GL"
+    "parcours": "Génie Logiciel"
   },
   {
     "id": 2,
     "mentionId": 1,
-    "parcours": "Réseaux et Systèmes",
-    "code": "UT-ST-INFO-RS"
+    "parcours": "Réseaux et Systèmes"
   },
   {
     "id": 3,
     "mentionId": 2,
-    "parcours": "Mathématiques Appliquées",
-    "code": "UT-ST-MATH-MA"
+    "parcours": "Mathématiques Appliquées"
   },
   {
     "id": 4,
     "mentionId": 3,
-    "parcours": "Littérature Malgache",
-    "code": "UT-LSH-LM-LIT"
+    "parcours": "Littérature Malgache"
   },
   {
     "id": 5,
     "mentionId": 4,
-    "parcours": "Bâtiment et Travaux Publics",
-    "code": "UT-ST-GC-BTP"
+    "parcours": "Bâtiment et Travaux Publics"
   },
   {
     "id": 6,
     "mentionId": 5,
-    "parcours": "Physique-Chimie",
-    "code": "ENS-SE-SP-PC"
+    "parcours": "Physique-Chimie"
   },
   {
     "id": 7,
     "mentionId": 6,
-    "parcours": "Halieutique",
-    "code": "IHSM-SM-OCEAN-HAL"
+    "parcours": "Halieutique"
   },
   {
     "id": 8,
     "mentionId": 7,
-    "parcours": "Droit Public Interne",
-    "code": "UT-DEG-DPUB"
+    "parcours": "Droit Public Interne"
   },
   {
     "id": 9,
     "mentionId": 8,
-    "parcours": null,
-    "code": "IES-MEN-ENV"
+    "parcours": null
   },
   {
     "id": 10,
     "mentionId": 9,
-    "parcours": null,
-    "code": "SCI-SV"
+    "parcours": null
   },
   {
     "id": 11,
     "mentionId": 10,
-    "parcours": null,
-    "code": "FL-EFF"
+    "parcours": null
   },
   {
     "id": 12,
     "mentionId": 11,
-    "parcours": null,
-    "code": "IES-TOL-AGR"
+    "parcours": null
   },
   {
     "id": 13,
     "mentionId": 12,
-    "parcours": null,
-    "code": "FL-GEO"
+    "parcours": null
   },
   {
     "id": 14,
     "mentionId": 13,
-    "parcours": null,
-    "code": "SCI-CHIM"
+    "parcours": null
   },
   {
     "id": 15,
     "mentionId": 14,
-    "parcours": null,
-    "code": "SCI-PHYS"
+    "parcours": null
   },
   {
     "id": 16,
     "mentionId": 15,
-    "parcours": null,
-    "code": "IES-ANOSY-ENV"
+    "parcours": null
   },
   {
     "id": 17,
     "mentionId": 16,
-    "parcours": null,
-    "code": "DEGS-GEST"
+    "parcours": null
   },
   {
     "id": 18,
     "mentionId": 17,
-    "parcours": null,
-    "code": "DEGS-DROIT"
+    "parcours": null
   },
   {
     "id": 19,
     "mentionId": 18,
-    "parcours": null,
-    "code": "FL-MAL"
+    "parcours": null
   },
   {
     "id": 20,
     "mentionId": 19,
-    "parcours": null,
-    "code": "CURA-ALSH"
+    "parcours": null
   },
   {
     "id": 21,
     "mentionId": 20,
-    "parcours": null,
-    "code": "ENS-MEL"
+    "parcours": null
   },
   {
     "id": 22,
     "mentionId": 21,
-    "parcours": null,
-    "code": "FL-PHILO"
+    "parcours": null
   },
   {
     "id": 23,
     "mentionId": 22,
-    "parcours": null,
-    "code": "SCI-BIODIV"
+    "parcours": null
   },
   {
     "id": 24,
     "mentionId": 23,
-    "parcours": null,
-    "code": "MED-SANTE"
+    "parcours": null
   },
   {
     "id": 25,
     "mentionId": 24,
-    "parcours": null,
-    "code": "CURA-STE"
+    "parcours": null
   },
   {
     "id": 26,
     "mentionId": 25,
-    "parcours": null,
-    "code": "FL-HIST"
+    "parcours": null
   },
   {
     "id": 27,
     "mentionId": 26,
-    "parcours": null,
-    "code": "SCI-SOL"
+    "parcours": null
   },
   {
     "id": 28,
     "mentionId": 27,
-    "parcours": null,
-    "code": "IHSM-SMH"
+    "parcours": null
   },
   {
     "id": 29,
     "mentionId": 9,
-    "parcours": null,
-    "code": "SCI-SV2"
+    "parcours": null
   }
 ]

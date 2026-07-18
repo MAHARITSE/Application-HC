@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  getEtablissements,
-  getDomaines,
-  getMentions,
-  getParcours,
   getStructures,
   createStructure,
   updateStructure,
@@ -16,38 +12,10 @@ export async function GET(request: Request) {
     const q = searchParams.get("q")?.trim();
     const field = searchParams.get("field");
     const distinct = searchParams.get("distinct") === "true";
-    const view = searchParams.get("view");
-    const level = searchParams.get("level");
 
-    // Les quatre bases peuvent être consultées indépendamment par l'interface.
-    if (view === "hierarchy") {
-      return NextResponse.json({
-        etablissements: getEtablissements(),
-        domaines: getDomaines(),
-        mentions: getMentions(),
-        parcours: getParcours(),
-      });
-    }
-    if (level === "etablissements") return NextResponse.json(getEtablissements());
-    if (level === "domaines") {
-      const etablissementId = Number(searchParams.get("etablissementId"));
-      return NextResponse.json(
-        getDomaines().filter((item) => !etablissementId || item.etablissementId === etablissementId)
-      );
-    }
-    if (level === "mentions") {
-      const domaineId = Number(searchParams.get("domaineId"));
-      return NextResponse.json(getMentions().filter((item) => !domaineId || item.domaineId === domaineId));
-    }
-    if (level === "parcours") {
-      const mentionId = Number(searchParams.get("mentionId"));
-      return NextResponse.json(getParcours().filter((item) => !mentionId || item.mentionId === mentionId));
-    }
-
-    // view=flat (ou absence de paramètre) : liste prête à afficher avec les parents.
     let facultes = getStructures();
 
-    // Autocomplete distinct values depuis les données normalisées.
+    // Autocomplete distinct values
     if (field && distinct) {
       const allowed = ["etablissement", "domaine", "mention", "parcours"] as const;
       if (!allowed.includes(field as any)) {
@@ -97,9 +65,7 @@ export async function POST(request: Request) {
     if (!mention) return NextResponse.json({ error: "Mention obligatoire" }, { status: 400 });
 
     const parcours = body.parcours?.trim() || null;
-    const code = body.code?.trim() || null;
 
-    // Vérification doublons (sans niveau)
     const existing = getStructures().find((f) =>
       (f.etablissement || "").toLowerCase() === etablissement.toLowerCase() &&
       (f.domaine || "").toLowerCase() === domaine.toLowerCase() &&
@@ -119,7 +85,6 @@ export async function POST(request: Request) {
       domaine,
       mention,
       parcours,
-      code,
     });
 
     return NextResponse.json(newFac);
@@ -157,7 +122,6 @@ export async function PUT(request: Request) {
     if (!mention) return NextResponse.json({ error: "Mention obligatoire" }, { status: 400 });
 
     const parcours = body.parcours?.trim() || null;
-    const code = body.code?.trim() || null;
 
     const existing = getStructures().find((f) =>
       f.id !== Number(body.id) &&
@@ -171,7 +135,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Cette structure existe déjà" }, { status: 409 });
     }
 
-    const updated = updateStructure(Number(body.id), { etablissement, domaine, mention, parcours, code });
+    const updated = updateStructure(Number(body.id), { etablissement, domaine, mention, parcours });
     if (!updated) return NextResponse.json({ error: "Structure académique non trouvée" }, { status: 404 });
     return NextResponse.json(updated);
   } catch (error: unknown) {

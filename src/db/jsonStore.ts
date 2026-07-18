@@ -80,7 +80,6 @@ export interface Faculte {
   domaine: string;
   mention: string;
   parcours: string | null;
-  code: string | null;
 }
 
 /** Nom métier de la vue aplatie utilisée par l'application actuelle. */
@@ -107,7 +106,6 @@ export interface Parcours {
   id: number;
   mentionId: number;
   parcours: string | null;
-  code: string | null;
 }
 
 export interface Enseignant {
@@ -251,7 +249,6 @@ export function getFacultes(): Faculte[] {
         domaine: domaine.domaine,
         mention: mention.mention,
         parcours: parcours.parcours,
-        code: parcours.code,
       };
     })
     .filter((item): item is Faculte => item !== null);
@@ -293,7 +290,6 @@ export function saveFacultes(data: Faculte[]) {
       id: item.id,
       mentionId: mention.id,
       parcours: item.parcours?.trim() || null,
-      code: item.code?.trim() || null,
     });
   }
 
@@ -430,7 +426,6 @@ export function createFaculte(data: Omit<Faculte, "id">): Faculte {
     id: nextId(list),
     mentionId: mention.id,
     parcours: data.parcours?.trim() || null,
-    code: data.code?.trim() || null,
   };
   list.push(newItem);
   saveParcours(list);
@@ -454,7 +449,6 @@ export function updateFaculte(id: number, data: Partial<Faculte>): Faculte | nul
     ...list[index],
     mentionId: mention.id,
     parcours: next.parcours?.trim() || null,
-    code: next.code?.trim() || null,
   };
   saveParcours(list);
   return getFacultes().find((item) => item.id === id)!;
@@ -590,36 +584,36 @@ export function seedIfEmpty() {
   let facultes = getFacultes();
   if (facultes.length === 0) {
     facultes = [
-      { id: 1, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Génie Logiciel", code: "UT-ST-INFO-GL" },
-      { id: 2, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Réseaux et Systèmes", code: "UT-ST-INFO-RS" },
-      { id: 3, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Mathématiques", parcours: "Mathématiques Appliquées", code: "UT-ST-MATH-MA" },
-      { id: 4, etablissement: "Université de Toliara", domaine: "Lettres et Sciences Humaines", mention: "Lettres Modernes", parcours: "Littérature Malgache", code: "UT-LSH-LM-LIT" },
-      { id: 5, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Génie Civil", parcours: "Bâtiment et Travaux Publics", code: "UT-ST-GC-BTP" },
-      { id: 6, etablissement: "ENS Toliara", domaine: "Sciences de l'Éducation", mention: "Sciences Physiques", parcours: "Physique-Chimie", code: "ENS-SE-SP-PC" },
-      { id: 7, etablissement: "IHSM", domaine: "Sciences de la Mer", mention: "Oceanographie", parcours: "Halieutique", code: "IHSM-SM-OCEAN-HAL" },
-      { id: 8, etablissement: "Université de Toliara", domaine: "Droit, Economie, Gestion", mention: "Droit Public", parcours: "Droit Public Interne", code: "UT-DEG-DPUB" },
+      { id: 1, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Génie Logiciel" },
+      { id: 2, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Réseaux et Systèmes" },
+      { id: 3, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Mathématiques", parcours: "Mathématiques Appliquées" },
+      { id: 4, etablissement: "Université de Toliara", domaine: "Lettres et Sciences Humaines", mention: "Lettres Modernes", parcours: "Littérature Malgache" },
+      { id: 5, etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Génie Civil", parcours: "Bâtiment et Travaux Publics" },
+      { id: 6, etablissement: "ENS Toliara", domaine: "Sciences de l'Éducation", mention: "Sciences Physiques", parcours: "Physique-Chimie" },
+      { id: 7, etablissement: "IHSM", domaine: "Sciences de la Mer", mention: "Oceanographie", parcours: "Halieutique" },
+      { id: 8, etablissement: "Université de Toliara", domaine: "Droit, Economie, Gestion", mention: "Droit Public", parcours: "Droit Public Interne" },
       // Nouvelles facultés basées sur les données enseignants fournies
-      { id: 9, etablissement: "IES-Menabe", domaine: "Environnement", mention: "Technique de l'Environnement", parcours: null, code: "IES-MEN-ENV" },
-      { id: 10, etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null, code: "SCI-SV" },
-      { id: 11, etablissement: "Fac Lettres", domaine: "Lettres", mention: "Etude Francçaise et francophones", parcours: null, code: "FL-EFF" },
-      { id: 12, etablissement: "IES-Toliara", domaine: "Agronomie", mention: "Agronomie", parcours: null, code: "IES-TOL-AGR" },
-      { id: 13, etablissement: "Fac Lettres", domaine: "Géographie", mention: "Géographie", parcours: null, code: "FL-GEO" },
-      { id: 14, etablissement: "SCIENCES", domaine: "Chimie", mention: "chimie", parcours: null, code: "SCI-CHIM" },
-      { id: 15, etablissement: "SCIENCES", domaine: "Physique", mention: "Physique et Applications", parcours: null, code: "SCI-PHYS" },
-      { id: 16, etablissement: "IES-ANOSY", domaine: "Environnement", mention: "Technique de l'environnement marin et terrestre", parcours: null, code: "IES-ANOSY-ENV" },
-      { id: 17, etablissement: "DEGS", domaine: "Gestion", mention: "Gestion", parcours: null, code: "DEGS-GEST" },
-      { id: 18, etablissement: "DEGS", domaine: "Droit", mention: "Droit", parcours: null, code: "DEGS-DROIT" },
-      { id: 19, etablissement: "Fac Lettres", domaine: "Malagasy", mention: "Malagasy", parcours: null, code: "FL-MAL" },
-      { id: 20, etablissement: "CURA", domaine: "Arts et Lettres", mention: "Arts, lettres et sciences humaines", parcours: null, code: "CURA-ALSH" },
-      { id: 21, etablissement: "ENS", domaine: "Enseignement", mention: "Metiers de L'enseignement des Lettres", parcours: null, code: "ENS-MEL" },
-      { id: 22, etablissement: "Fac Lettres", domaine: "Philosophie", mention: "Philosophie", parcours: null, code: "FL-PHILO" },
-      { id: 23, etablissement: "SCIENCES", domaine: "Biodiversité", mention: "Biodiversité", parcours: null, code: "SCI-BIODIV" },
-      { id: 24, etablissement: "MEDECINE", domaine: "Sciences de Santé", mention: "Sciences de Santé", parcours: null, code: "MED-SANTE" },
-      { id: 25, etablissement: "CURA", domaine: "Sciences et Technologies", mention: "Sciences, Technologie et Environnement", parcours: null, code: "CURA-STE" },
-      { id: 26, etablissement: "Fac Lettres", domaine: "Histoire", mention: "Histoire", parcours: null, code: "FL-HIST" },
-      { id: 27, etablissement: "SCIENCES", domaine: "Sciences de la Terre", mention: "Sciences de la terre", parcours: null, code: "SCI-SOL" },
-      { id: 28, etablissement: "IHSM", domaine: "Sciences Marines", mention: "Sciences Marine et Halieutiques", parcours: null, code: "IHSM-SMH" },
-      { id: 29, etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null, code: "SCI-SV2" },
+      { id: 9, etablissement: "IES-Menabe", domaine: "Environnement", mention: "Technique de l'Environnement", parcours: null },
+      { id: 10, etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null },
+      { id: 11, etablissement: "Fac Lettres", domaine: "Lettres", mention: "Etude Francçaise et francophones", parcours: null },
+      { id: 12, etablissement: "IES-Toliara", domaine: "Agronomie", mention: "Agronomie", parcours: null },
+      { id: 13, etablissement: "Fac Lettres", domaine: "Géographie", mention: "Géographie", parcours: null },
+      { id: 14, etablissement: "SCIENCES", domaine: "Chimie", mention: "chimie", parcours: null },
+      { id: 15, etablissement: "SCIENCES", domaine: "Physique", mention: "Physique et Applications", parcours: null },
+      { id: 16, etablissement: "IES-ANOSY", domaine: "Environnement", mention: "Technique de l'environnement marin et terrestre", parcours: null },
+      { id: 17, etablissement: "DEGS", domaine: "Gestion", mention: "Gestion", parcours: null },
+      { id: 18, etablissement: "DEGS", domaine: "Droit", mention: "Droit", parcours: null },
+      { id: 19, etablissement: "Fac Lettres", domaine: "Malagasy", mention: "Malagasy", parcours: null },
+      { id: 20, etablissement: "CURA", domaine: "Arts et Lettres", mention: "Arts, lettres et sciences humaines", parcours: null },
+      { id: 21, etablissement: "ENS", domaine: "Enseignement", mention: "Metiers de L'enseignement des Lettres", parcours: null },
+      { id: 22, etablissement: "Fac Lettres", domaine: "Philosophie", mention: "Philosophie", parcours: null },
+      { id: 23, etablissement: "SCIENCES", domaine: "Biodiversité", mention: "Biodiversité", parcours: null },
+      { id: 24, etablissement: "MEDECINE", domaine: "Sciences de Santé", mention: "Sciences de Santé", parcours: null },
+      { id: 25, etablissement: "CURA", domaine: "Sciences et Technologies", mention: "Sciences, Technologie et Environnement", parcours: null },
+      { id: 26, etablissement: "Fac Lettres", domaine: "Histoire", mention: "Histoire", parcours: null },
+      { id: 27, etablissement: "SCIENCES", domaine: "Sciences de la Terre", mention: "Sciences de la terre", parcours: null },
+      { id: 28, etablissement: "IHSM", domaine: "Sciences Marines", mention: "Sciences Marine et Halieutiques", parcours: null },
+      { id: 29, etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null },
     ];
     saveFacultes(facultes);
   }
