@@ -52,6 +52,9 @@ interface Faculte {
   parcours: string | null;
   code: string | null;
 }
+interface EtablissementOption { id: number; etablissement: string }
+interface DomaineOption { id: number; etablissementId: number; domaine: string }
+
 interface EnseignantRow {
   id: number;
   nom: string;
@@ -201,6 +204,10 @@ export default function HomePage() {
   const [editingFacId, setEditingFacId] = useState<number | null>(null);
   const [facSuggestions, setFacSuggestions] = useState<Record<string, string[]>>({});
   const [facError, setFacError] = useState("");
+  const [structureTab, setStructureTab] = useState<"etablissement" | "domaine" | "mention">("etablissement");
+  const [etablissements, setEtablissements] = useState<EtablissementOption[]>([]);
+  const [domaines, setDomaines] = useState<DomaineOption[]>([]);
+  const [structureForm, setStructureForm] = useState({ etablissement: "", etablissementId: "", domaine: "", domaineId: "", mention: "", parcours: "" });
 
   const [anneeForm, setAnneeForm] = useState({
     libelle: "",
@@ -293,8 +300,14 @@ export default function HomePage() {
   }, []);
 
   const loadFacultes = useCallback(async () => {
-    const res = await fetch("/api/structures");
-    setFacultes(await res.json());
+    const [structuresRes, etablissementsRes, domainesRes] = await Promise.all([
+      fetch("/api/structures"),
+      fetch("/api/structures?level=etablissements"),
+      fetch("/api/structures?level=domaines"),
+    ]);
+    setFacultes(await structuresRes.json());
+    setEtablissements(await etablissementsRes.json());
+    setDomaines(await domainesRes.json());
   }, []);
 
   const loadAllEnseignants = useCallback(async () => {
@@ -881,6 +894,27 @@ export default function HomePage() {
     } catch (err: any) {
       setFacError(err.message);
     }
+  };
+
+  const handleSaveStructureLevel = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFacError("");
+    const body = structureTab === "etablissement"
+      ? { level: "etablissement", etablissement: structureForm.etablissement }
+      : structureTab === "domaine"
+        ? { level: "domaine", etablissementId: Number(structureForm.etablissementId), domaine: structureForm.domaine }
+        : { level: "mention", domaineId: Number(structureForm.domaineId), mention: structureForm.mention, parcours: structureForm.parcours };
+    try {
+      const response = await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json();
+      if (!response.ok) { setFacError(data.error || "Erreur lors de l'enregistrement"); return; }
+      setStructureForm((form) => structureTab === "etablissement"
+        ? { ...form, etablissement: "" }
+        : structureTab === "domaine"
+          ? { ...form, domaine: "" }
+          : { ...form, mention: "", parcours: "" });
+      await loadFacultes();
+    } catch { setFacError("Impossible d'enregistrer la structure"); }
   };
 
   const handleEditFac = (f: Faculte) => {
@@ -1470,13 +1504,7 @@ export default function HomePage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-2">Heures complémentaires</label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <NumInput label="ET" value={heuresHCForm.heuresET} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresET: v })} />
-                  <NumInput label="ED" value={heuresHCForm.heuresED} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresED: v })} />
-                  <NumInput label="EP" value={heuresHCForm.heuresEP} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresEP: v })} />
-                  <NumInput label="Soutenance" value={heuresHCForm.heuresSoutenance} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresSoutenance: v })} />
-                  <NumInput label="Recherche" value={heuresHCForm.heuresRecherche} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresRecherche: v })} />
-                </div>
+                <HeuresFields form={heuresHCForm} onChange={(field, value) => setHeuresHCForm({ ...heuresHCForm, [field]: value })} />
               </div>
 
               {/* Aperçu calcul selon prompt.md */}
@@ -1628,7 +1656,7 @@ export default function HomePage() {
           setEditingHeureId(null);
         }}
         title={`📋 Heures ${selectedAnnee?.libelle || ""} – ${selectedEns?.nomPrenom || ""}`}
-        size="3xl"
+        size="2xl"
       >
         <div className="space-y-4">
           {/* Formulaire ajout / édition */}
@@ -1693,11 +1721,7 @@ export default function HomePage() {
                   ))}
                 </select>
               </div>
-              <NumInput label="ET" value={heuresForm.heuresET} onChange={(v) => setHeuresForm({ ...heuresForm, heuresET: v })} />
-              <NumInput label="ED" value={heuresForm.heuresED} onChange={(v) => setHeuresForm({ ...heuresForm, heuresED: v })} />
-              <NumInput label="EP" value={heuresForm.heuresEP} onChange={(v) => setHeuresForm({ ...heuresForm, heuresEP: v })} />
-              <NumInput label="Soutenance" value={heuresForm.heuresSoutenance} onChange={(v) => setHeuresForm({ ...heuresForm, heuresSoutenance: v })} />
-              <NumInput label="Recherche" value={heuresForm.heuresRecherche} onChange={(v) => setHeuresForm({ ...heuresForm, heuresRecherche: v })} />
+              <div className="sm:col-span-3"><HeuresFields form={heuresForm} onChange={(field, value) => setHeuresForm({ ...heuresForm, [field]: value })} /></div>
             </div>
             <div className="flex gap-2">
               <button
@@ -1988,49 +2012,47 @@ export default function HomePage() {
       </Modal>
 
       {/* Modal Structure académique */}
-      <Modal isOpen={showFacModal} onClose={() => { setShowFacModal(false); setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); setFacError(""); }} title="🏛️ Structure Académique" size="xl">
+      <Modal isOpen={showFacModal} onClose={() => { setShowFacModal(false); setFacError(""); }} title="🏛️ Structure Académique" size="xl">
         <div className="space-y-4">
-          <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Établissement *</label>
-                <input value={facForm.etablissement} onChange={(e) => handleFacFieldChange("etablissement", e.target.value)} list="etablissement-list" required placeholder="Ex: Université de Toliara" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="etablissement-list">{facSuggestions.etablissement?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+          <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Niveaux de structure">
+            {([
+              ["etablissement", "Établissement"],
+              ["domaine", "Domaine"],
+              ["mention", "Mention & parcours"],
+            ] as const).map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => { setStructureTab(tab); setFacError(""); }} className={`rounded-md px-2 py-2 text-xs sm:text-sm font-semibold transition ${structureTab === tab ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {label}{tab === "etablissement" ? " *" : tab === "domaine" ? " *" : " *"}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSaveStructureLevel} className="rounded-lg border bg-slate-50 p-4">
+            {structureTab === "etablissement" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">Ajoutez un établissement. Il sera ensuite disponible dans l&apos;onglet Domaine.</p>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><input required value={structureForm.etablissement} onChange={(e) => setStructureForm({ ...structureForm, etablissement: e.target.value })} placeholder="Ex. Université de Toliara" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Domaine *</label>
-                <input value={facForm.domaine} onChange={(e) => handleFacFieldChange("domaine", e.target.value)} list="domaine-list" required placeholder="Ex: Sciences et Technologies" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="domaine-list">{facSuggestions.domaine?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+            )}
+            {structureTab === "domaine" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><select required value={structureForm.etablissementId} onChange={(e) => setStructureForm({ ...structureForm, etablissementId: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"><option value="">-- Sélectionner l&apos;établissement --</option>{etablissements.map((item) => <option key={item.id} value={item.id}>{item.etablissement}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Domaine *</label><input required value={structureForm.domaine} onChange={(e) => setStructureForm({ ...structureForm, domaine: e.target.value })} placeholder="Ex. Sciences et Technologies" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Mention *</label>
-                <input value={facForm.mention} onChange={(e) => handleFacFieldChange("mention", e.target.value)} list="mention-list" required placeholder="Ex: Informatique" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="mention-list">{facSuggestions.mention?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+            )}
+            {structureTab === "mention" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><select required value={structureForm.etablissementId} onChange={(e) => setStructureForm({ ...structureForm, etablissementId: e.target.value, domaineId: "" })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"><option value="">-- Sélectionner --</option>{etablissements.map((item) => <option key={item.id} value={item.id}>{item.etablissement}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Domaine *</label><select required value={structureForm.domaineId} onChange={(e) => setStructureForm({ ...structureForm, domaineId: e.target.value })} disabled={!structureForm.etablissementId} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-100"><option value="">-- Sélectionner --</option>{domaines.filter((item) => item.etablissementId === Number(structureForm.etablissementId)).map((item) => <option key={item.id} value={item.id}>{item.domaine}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Mention *</label><input required value={structureForm.mention} onChange={(e) => setStructureForm({ ...structureForm, mention: e.target.value })} placeholder="Ex. Informatique" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Parcours</label><input value={structureForm.parcours} onChange={(e) => setStructureForm({ ...structureForm, parcours: e.target.value })} placeholder="Optionnel" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (optionnel)</label>
-                <input value={facForm.parcours} onChange={(e) => handleFacFieldChange("parcours", e.target.value)} list="parcours-list" placeholder="Ex: Génie Logiciel" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="parcours-list">{facSuggestions.parcours?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-              </div>
-            </div>
-            {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
-            <div className="flex gap-2">
-              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"><Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter la structure"}</button>
-              {editingFacId && (<button type="button" onClick={() => { setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); }} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white">Annuler édition</button>)}
-            </div>
+            )}
+            {facError && <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-600">{facError}</p>}
+            <button type="submit" className="mt-4 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"><Plus size={16} /> Ajouter</button>
           </form>
 
-          <div className="overflow-x-auto max-h-[400px] border rounded-lg">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 sticky top-0"><tr>{["Établissement", "Domaine", "Mention", "Parcours", ""].map((h: string) => (<th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>))}</tr></thead>
-              <tbody className="divide-y divide-slate-100">{facultes.map((f: Faculte) => (<tr key={f.id} onClick={() => handleEditFac(f)} className={`hover:bg-purple-50 cursor-pointer ${editingFacId === f.id ? "bg-yellow-50" : ""}`}>
-                <td className="px-2 py-2 font-medium truncate max-w-[150px]">{f.etablissement}</td>
-                <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
-                <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
-                <td className="px-2 py-2">{f.parcours || "—"}</td>
-                <td className="px-2 py-2 text-center"><button onClick={(ev) => { ev.stopPropagation(); handleDeleteFac(f.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Supprimer"><Trash2 size={14} /></button></td>
-              </tr>))}</tbody>
-            </table>
+          <div className="max-h-[300px] overflow-x-auto rounded-lg border">
+            <table className="w-full text-xs"><thead className="sticky top-0 bg-slate-50"><tr>{["Établissement", "Domaine", "Mention", "Parcours"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{facultes.map((f) => <tr key={f.id}><td className="px-3 py-2">{f.etablissement}</td><td className="px-3 py-2">{f.domaine}</td><td className="px-3 py-2">{f.mention}</td><td className="px-3 py-2">{f.parcours || "—"}</td></tr>)}</tbody></table>
           </div>
         </div>
       </Modal>
@@ -2488,6 +2510,22 @@ function StatCard({ icon, label, value, sub, color }: { icon: React.ReactNode; l
         <div className="text-[10px] sm:text-xs text-slate-400 truncate">{sub}</div>
       </div>
       <div className={`h-1 bg-gradient-to-r ${colors[color]}`} />
+    </div>
+  );
+}
+
+function HeuresFields({ form, onChange }: { form: { heuresET: number; heuresED: number; heuresEP: number; heuresSoutenance: number; heuresRecherche: number }; onChange: (field: "heuresET" | "heuresED" | "heuresEP" | "heuresSoutenance" | "heuresRecherche", value: number) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr]">
+      <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+        <NumInput label="ET" value={form.heuresET} onChange={(v) => onChange("heuresET", v)} />
+        <NumInput label="ED" value={form.heuresED} onChange={(v) => onChange("heuresED", v)} />
+        <NumInput label="EP" value={form.heuresEP} onChange={(v) => onChange("heuresEP", v)} />
+      </div>
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+        <NumInput label="Sout." value={form.heuresSoutenance} onChange={(v) => onChange("heuresSoutenance", v)} />
+        <NumInput label="Rech." value={form.heuresRecherche} onChange={(v) => onChange("heuresRecherche", v)} />
+      </div>
     </div>
   );
 }
