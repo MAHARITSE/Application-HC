@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
     // Autocomplete distinct values
     if (field && distinct) {
-      const allowed = ["etablissement", "domaine", "mention", "parcours", "niveau"] as const;
+      const allowed = ["etablissement", "domaine", "mention", "parcours"] as const;
       if (!allowed.includes(field as any)) {
         return NextResponse.json({ error: "Champ invalide" }, { status: 400 });
       }
@@ -34,8 +34,7 @@ export async function GET(request: Request) {
         (f.etablissement || "").toLowerCase().includes(lowerQ) ||
         (f.domaine || "").toLowerCase().includes(lowerQ) ||
         (f.mention || "").toLowerCase().includes(lowerQ) ||
-        (f.parcours || "").toLowerCase().includes(lowerQ) ||
-        (f.niveau || "").toLowerCase().includes(lowerQ)
+        (f.parcours || "").toLowerCase().includes(lowerQ)
       );
     }
 
@@ -61,21 +60,19 @@ export async function POST(request: Request) {
     if (!mention) return NextResponse.json({ error: "Mention obligatoire" }, { status: 400 });
 
     const parcours = body.parcours?.trim() || null;
-    const niveau = body.niveau?.trim() || null;
     const code = body.code?.trim() || null;
 
-    // Vérification doublons
+    // Vérification doublons (sans niveau)
     const existing = getFacultes().find((f) =>
       (f.etablissement || "").toLowerCase() === etablissement.toLowerCase() &&
       (f.domaine || "").toLowerCase() === domaine.toLowerCase() &&
       (f.mention || "").toLowerCase() === mention.toLowerCase() &&
-      (f.parcours || "")?.toLowerCase() === (parcours || "").toLowerCase() &&
-      (f.niveau || "")?.toLowerCase() === (niveau || "").toLowerCase()
+      (f.parcours || "").toLowerCase() === (parcours || "").toLowerCase()
     );
 
     if (existing) {
       return NextResponse.json(
-        { error: "Cette faculté existe déjà (même établissement/domaine/mention/parcours/niveau)" },
+        { error: "Cette faculté existe déjà (même établissement/domaine/mention/parcours)" },
         { status: 409 }
       );
     }
@@ -85,7 +82,6 @@ export async function POST(request: Request) {
       domaine,
       mention,
       parcours,
-      niveau,
       code,
     });
 
@@ -124,7 +120,6 @@ export async function PUT(request: Request) {
     if (!mention) return NextResponse.json({ error: "Mention obligatoire" }, { status: 400 });
 
     const parcours = body.parcours?.trim() || null;
-    const niveau = body.niveau?.trim() || null;
     const code = body.code?.trim() || null;
 
     const existing = getFacultes().find((f) =>
@@ -132,15 +127,14 @@ export async function PUT(request: Request) {
       (f.etablissement || "").toLowerCase() === etablissement.toLowerCase() &&
       (f.domaine || "").toLowerCase() === domaine.toLowerCase() &&
       (f.mention || "").toLowerCase() === mention.toLowerCase() &&
-      (f.parcours || "").toLowerCase() === (parcours || "").toLowerCase() &&
-      (f.niveau || "").toLowerCase() === (niveau || "").toLowerCase()
+      (f.parcours || "").toLowerCase() === (parcours || "").toLowerCase()
     );
 
     if (existing) {
       return NextResponse.json({ error: "Cette faculté existe déjà" }, { status: 409 });
     }
 
-    const updated = updateFaculte(Number(body.id), { etablissement, domaine, mention, parcours, niveau, code });
+    const updated = updateFaculte(Number(body.id), { etablissement, domaine, mention, parcours, code });
     if (!updated) return NextResponse.json({ error: "Faculté non trouvée" }, { status: 404 });
     return NextResponse.json(updated);
   } catch (error: unknown) {

@@ -38,7 +38,7 @@ export const grades = pgTable("grades", {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TABLE 3: Structure Académique - Facultés / Établissements
-// Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau
+// Hiérarchie: Établissement → Domaine → Mention → Parcours
 // ═══════════════════════════════════════════════════════════════════════════
 export const facultes = pgTable(
   "facultes",
@@ -48,7 +48,6 @@ export const facultes = pgTable(
     domaine: varchar("domaine", { length: 200 }).notNull(),
     mention: varchar("mention", { length: 200 }).notNull(),
     parcours: varchar("parcours", { length: 200 }),
-    niveau: varchar("niveau", { length: 50 }),
     code: varchar("code", { length: 20 }),
   },
   (table) => ({
@@ -57,8 +56,7 @@ export const facultes = pgTable(
       table.etablissement,
       table.domaine,
       table.mention,
-      table.parcours,
-      table.niveau
+      table.parcours
     ),
   })
 );
