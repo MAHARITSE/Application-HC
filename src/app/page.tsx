@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
   CreditCard,
+  ArrowDownToLine,
   Wallet,
   Download,
   Printer,
@@ -238,6 +239,11 @@ export default function HomePage() {
   });
   const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
   const [batchFichesData, setBatchFichesData] = useState<any[]>([]);
+
+  // Avance
+  const [showAvanceModal, setShowAvanceModal] = useState(false);
+  const [avanceForm, setAvanceForm] = useState({ montantAvance: 0, dateAvance: new Date().toISOString().slice(0, 10), reference: "" });
+  const [selectedEnsForAvance, setSelectedEnsForAvance] = useState<EnseignantRow | null>(null);
 
 
 
@@ -821,6 +827,38 @@ export default function HomePage() {
     await loadEnseignants();
   };
 
+  // ── Avance ─────────────────────────────────────────────────────────────────
+  const handleOpenAvance = (e: EnseignantRow) => {
+    setSelectedEnsForAvance(e);
+    setAvanceForm({ montantAvance: 0, dateAvance: new Date().toISOString().slice(0, 10), reference: "" });
+    setShowAvanceModal(true);
+  };
+
+  const handleSaveAvance = async () => {
+    if (!selectedEnsForAvance || !selectedAnnee || avanceForm.montantAvance <= 0) {
+      alert("Veuillez saisir un montant d'avance supérieur à 0.");
+      return;
+    }
+    await fetch("/api/paiements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enseignantId: selectedEnsForAvance.id,
+        anneeId: selectedAnnee.id,
+        montantAvance: avanceForm.montantAvance,
+        dateAvance: avanceForm.dateAvance || null,
+        montantPaye: 0,
+        pourcentageTranche: 0,
+        datePaiement: null,
+        reference: avanceForm.reference || null,
+        statut: "Avance",
+      }),
+    });
+    setShowAvanceModal(false);
+    await loadEnseignants();
+    alert("Avance enregistrée avec succès dans la table paiements.");
+  };
+
   // ── Structure académique ────────────────────────────────────────────────────────────────
   const handleSaveFac = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1140,7 +1178,7 @@ export default function HomePage() {
                       return (
                         <tr key={e.id} className={`hover:bg-indigo-50/50 transition ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}>
                           <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
-                          <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]">
+                          <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]" onDoubleClick={() => handleOpenHeures(e)} title="Double-clic pour ouvrir les heures">
                             <div className="truncate">{e.nomPrenom}</div>
                             {e.specialite && <div className="text-[10px] text-slate-400 font-normal truncate">{e.specialite}</div>}
                           </td>
@@ -1220,6 +1258,9 @@ export default function HomePage() {
                               </button>
                               <button onClick={() => handleOpenPaiement(e)} title="Préparer paiement" className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition">
                                 <Wallet size={14} />
+                              </button>
+                              <button onClick={() => handleOpenAvance(e)} title="Faire une avance" className="p-1.5 rounded-lg text-orange-600 hover:bg-orange-100 transition">
+                                <ArrowDownToLine size={14} />
                               </button>
                               <button onClick={() => handleOpenFiche(e)} title="Fiche individuelle" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition">
                                 <FileText size={14} />
@@ -1587,7 +1628,7 @@ export default function HomePage() {
           setEditingHeureId(null);
         }}
         title={`📋 Heures ${selectedAnnee?.libelle || ""} – ${selectedEns?.nomPrenom || ""}`}
-        size="2xl"
+        size="3xl"
       >
         <div className="space-y-4">
           {/* Formulaire ajout / édition */}
@@ -1881,6 +1922,60 @@ export default function HomePage() {
               </button>
               <button onClick={handleSavePaiement} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
                 <CreditCard size={16} /> Enregistrer paiement
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Avance */}
+      <Modal isOpen={showAvanceModal} onClose={() => setShowAvanceModal(false)} title="💰 Enregistrer une Avance" size="md">
+        {selectedEnsForAvance && (
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-900">
+              <p className="font-semibold">Enseignant : {selectedEnsForAvance.nomPrenom} — Année : {selectedAnnee?.libelle}</p>
+              <p>Cette avance sera enregistrée dans la table paiements avec le statut <strong>Avance</strong> et un montant payé de 0.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Montant de l&apos;avance (Ar) *</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={avanceForm.montantAvance}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, montantAvance: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                  placeholder="Ex: 50000"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Date de l&apos;avance</label>
+                <input
+                  type="date"
+                  value={avanceForm.dateAvance}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, dateAvance: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-slate-700 mb-1">Référence (optionnel)</label>
+                <input
+                  type="text"
+                  value={avanceForm.reference}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, reference: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                  placeholder="Ex: AV-001"
+                />
+              </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+              <p className="text-xs text-amber-800 mb-1">Montant à enregistrer comme avance</p>
+              <p className="text-xl font-bold text-amber-700">{(avanceForm.montantAvance || 0).toLocaleString("fr-MG")} Ar</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAvanceModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Annuler</button>
+              <button onClick={handleSaveAvance} className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 shadow-md">
+                <ArrowDownToLine size={16} /> Enregistrer l&apos;avance
               </button>
             </div>
           </div>
