@@ -40,7 +40,7 @@
     "heuresEP": 20,
     "heuresSoutenance": 5,
     "heuresRecherche": 10,
-    "obligation": 125,
+    "obligation": 0,
     "createdAt": "2026-07-18T06:00:00.000Z",
     "parcoursId": 1
   },
