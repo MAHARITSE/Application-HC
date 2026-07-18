@@ -24,6 +24,7 @@ import {
   CreditCard,
   Wallet,
   Download,
+  Printer,
 } from "lucide-react";
 import { calcHC, calcHCNette, calcHCArrondie, calcMontantBrut, calcIRSA, formatAriary, DEFAULT_HC_FORMULA } from "@/lib/metier";
 
@@ -217,6 +218,23 @@ export default function HomePage() {
   });
 
   const [returnToHeuresAfterCreate, setReturnToHeuresAfterCreate] = useState(false);
+
+  // Nouveaux états pour la gestion des paiements et fiches individuelles demandées
+  const [showEtatFicheModal, setShowEtatFicheModal] = useState(false);
+  const [etatFicheForm, setEtatFicheForm] = useState({ numeroEtat: "0001", tranche: "" });
+  const [targetEnsForFiche, setTargetEnsForFiche] = useState<EnseignantRow | null>(null);
+
+  const [showPaiementManagerModal, setShowPaiementManagerModal] = useState(false);
+  const [paiementManagerTab, setPaiementManagerTab] = useState<"choice" | "list" | "batch">("choice");
+  const [allPaiements, setAllPaiements] = useState<any[]>([]);
+  const [batchPaiementForm, setBatchPaiementForm] = useState({
+    pourcentageTranche: 100,
+    montantAvance: 0,
+    datePaiement: new Date().toISOString().slice(0, 10),
+    reference: "",
+  });
+  const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
+  const [batchFichesData, setBatchFichesData] = useState<any[]>([]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const fetchDistinct = useCallback(async (field: string, q: string) => {
@@ -662,18 +680,86 @@ export default function HomePage() {
   };
 
   // ── Fiche ───────────────────────────────────────────────────────────────────
-  const handleOpenFiche = async (e: EnseignantRow) => {
-    if (!selectedAnnee) return;
-    const num = prompt("N° de l'état :", "0001") || "0001";
-    const res = await fetch(`/api/export/fiche?enseignantId=${e.id}&anneeId=${selectedAnnee.id}&numeroEtat=${num}`);
+  const handleOpenFichePrompt = (e: EnseignantRow) => {
+    setTargetEnsForFiche(e);
+    setEtatFicheForm({
+      numeroEtat: "0001",
+      tranche: selectedAnnee?.tranche || "Première tranche",
+    });
+    setShowEtatFicheModal(true);
+  };
+
+  const handleConfirmFiche = async () => {
+    if (!targetEnsForFiche || !selectedAnnee) return;
+    const res = await fetch(`/api/export/fiche?enseignantId=${targetEnsForFiche.id}&anneeId=${selectedAnnee.id}&numeroEtat=${encodeURIComponent(etatFicheForm.numeroEtat)}`);
     const data = await res.json();
     if (!res.ok) {
       alert(data.error || "Erreur génération fiche");
       return;
     }
     setFicheData(data);
-    setSelectedEns(e);
+    setSelectedEns(targetEnsForFiche);
+    setShowEtatFicheModal(false);
     setShowFicheModal(true);
+  };
+
+  const handleOpenFiche = async (e: EnseignantRow) => {
+    handleOpenFichePrompt(e);
+  };
+
+  const handleOpenPaiementManager = async () => {
+    if (!selectedAnnee) return;
+    const res = await fetch(`/api/paiements?anneeId=${selectedAnnee.id}`);
+    const data = await res.json();
+    setAllPaiements(Array.isArray(data) ? data : []);
+    setPaiementManagerTab("choice");
+    setShowPaiementManagerModal(true);
+  };
+
+  const handleBatchPaymentAndPrint = async () => {
+    if (!selectedAnnee || filtered.length === 0) {
+      alert("Aucun enseignant à payer pour cette année.");
+      return;
+    }
+    setLoading(true);
+    try {
+      for (const e of filtered) {
+        const calc = calcRow(e);
+        const montantTranche = Math.round(calc.montantNet * batchPaiementForm.pourcentageTranche / 100);
+        const montantPaye = montantTranche - batchPaiementForm.montantAvance;
+        await fetch("/api/paiements", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enseignantId: e.id,
+            anneeId: selectedAnnee.id,
+            montantAvance: batchPaiementForm.montantAvance,
+            dateAvance: null,
+            pourcentageTranche: batchPaiementForm.pourcentageTranche,
+            montantPaye: Math.max(0, montantPaye),
+            datePaiement: batchPaiementForm.datePaiement || null,
+            reference: batchPaiementForm.reference || null,
+            statut: batchPaiementForm.pourcentageTranche >= 100 ? "Payé" : "Partiel",
+          }),
+        });
+      }
+
+      let num = 1;
+      const fiches = await Promise.all(
+        filtered.map(async (e) => {
+          const numeroEtat = String(num++).padStart(4, "0");
+          const r = await fetch(`/api/export/fiche?enseignantId=${e.id}&anneeId=${selectedAnnee.id}&numeroEtat=${numeroEtat}`);
+          return r.ok ? r.json() : null;
+        })
+      );
+
+      setBatchFichesData(fiches.filter(Boolean));
+      setShowPaiementManagerModal(false);
+      setShowBatchPrintModal(true);
+      await loadEnseignants();
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Paiement ────────────────────────────────────────────────────────────────
@@ -909,6 +995,12 @@ export default function HomePage() {
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
               >
                 <BarChart3 size={16} /> Saisir Heures
+              </button>
+              <button
+                onClick={handleOpenPaiementManager}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm"
+              >
+                <CreditCard size={16} /> Paiements
               </button>
               <button
                 onClick={() => setShowAllEnsModal(true)}
@@ -2018,6 +2110,250 @@ export default function HomePage() {
               </div>
             </div>
           ))}
+        </div>
+      </Modal>
+
+      {/* Modal Etat Fiche Individuelle */}
+      <Modal isOpen={showEtatFicheModal} onClose={() => setShowEtatFicheModal(false)} title="📄 Générer la Fiche Individuelle" size="md">
+        <div className="space-y-4">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs">
+            <p className="font-semibold text-indigo-900">{targetEnsForFiche?.nomPrenom}</p>
+            <p className="text-indigo-700 mt-0.5">Veuillez renseigner l&apos;état à faire pour cette fiche individuelle :</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">N° de l&apos;état *</label>
+            <input
+              type="text"
+              value={etatFicheForm.numeroEtat}
+              onChange={(e) => setEtatFicheForm({ ...etatFicheForm, numeroEtat: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Ex: 0001"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Tranche / Période</label>
+            <input
+              type="text"
+              value={etatFicheForm.tranche}
+              onChange={(e) => setEtatFicheForm({ ...etatFicheForm, tranche: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Première tranche"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={() => setShowEtatFicheModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">
+              Annuler
+            </button>
+            <button onClick={handleConfirmFiche} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700">
+              <FileText size={16} /> Générer l&apos;état
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Paiement Manager (Choix : afficher paiements faits ou nouveau paiement masse) */}
+      <Modal isOpen={showPaiementManagerModal} onClose={() => setShowPaiementManagerModal(false)} title="💳 Gestion des Paiements" size="xl">
+        <div className="space-y-4">
+          {paiementManagerTab === "choice" && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-slate-700 font-medium text-center">Que souhaitez-vous faire pour les paiements de l&apos;année {selectedAnnee?.libelle} ?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <button
+                  onClick={async () => {
+                    const res = await fetch(`/api/paiements?anneeId=${selectedAnnee?.id}`);
+                    const data = await res.json();
+                    setAllPaiements(Array.isArray(data) ? data : []);
+                    setPaiementManagerTab("list");
+                  }}
+                  className="p-5 rounded-xl border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition text-left flex flex-col justify-between group shadow-sm"
+                >
+                  <div>
+                    <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center mb-3 group-hover:scale-105 transition">
+                      <CreditCard size={20} />
+                    </div>
+                    <h3 className="font-bold text-indigo-900 text-base mb-1">Afficher les paiements déjà faits</h3>
+                    <p className="text-xs text-indigo-700">Consulter l&apos;historique de tous les paiements enregistrés dans la base de données.</p>
+                  </div>
+                  <span className="mt-4 text-xs font-semibold text-indigo-600 flex items-center gap-1">Voir la liste →</span>
+                </button>
+
+                <button
+                  onClick={() => setPaiementManagerTab("batch")}
+                  className="p-5 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition text-left flex flex-col justify-between group shadow-sm"
+                >
+                  <div>
+                    <div className="w-10 h-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center mb-3 group-hover:scale-105 transition">
+                      <Printer size={20} />
+                    </div>
+                    <h3 className="font-bold text-emerald-900 text-base mb-1">Faire un nouveau paiement (Imprimer tous les états)</h3>
+                    <p className="text-xs text-emerald-700">Enregistrer les paiements pour tous les enseignants filtrés et imprimer tous les états en une seule fois.</p>
+                  </div>
+                  <span className="mt-4 text-xs font-semibold text-emerald-600 flex items-center gap-1">Commencer →</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {paiementManagerTab === "list" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <button onClick={() => setPaiementManagerTab("choice")} className="text-xs text-indigo-600 hover:underline font-medium">
+                  ← Retour au choix
+                </button>
+                <p className="text-xs font-semibold text-slate-700">Paiements enregistrés ({allPaiements.length})</p>
+              </div>
+              <div className="overflow-x-auto max-h-[350px] border border-slate-200 rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      {["Enseignant", "Montant Payé", "Avance", "% Tranche", "Date", "Référence", "Statut", "Action"].map((h) => (
+                        <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {allPaiements.map((p) => {
+                      const ens = allEnseignants.find((e) => e.id === p.enseignantId);
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-medium">{ens?.nomPrenom || `ID #${p.enseignantId}`}</td>
+                          <td className="px-3 py-2 font-bold text-emerald-700">{p.montantPaye?.toLocaleString()} Ar</td>
+                          <td className="px-3 py-2">{p.montantAvance?.toLocaleString()} Ar</td>
+                          <td className="px-3 py-2">{p.pourcentageTranche}%</td>
+                          <td className="px-3 py-2">{p.datePaiement || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-[11px]">{p.reference || "—"}</td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${p.statut === "Payé" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                              {p.statut}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Supprimer ce paiement ?")) return;
+                                await fetch(`/api/paiements?id=${p.id}`, { method: "DELETE" });
+                                const res = await fetch(`/api/paiements?anneeId=${selectedAnnee?.id}`);
+                                const data = await res.json();
+                                setAllPaiements(Array.isArray(data) ? data : []);
+                                await loadEnseignants();
+                              }}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {allPaiements.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-slate-400">
+                          Aucun paiement enregistré dans la base de données pour cette année.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {paiementManagerTab === "batch" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <button onClick={() => setPaiementManagerTab("choice")} className="text-xs text-indigo-600 hover:underline font-medium">
+                  ← Retour au choix
+                </button>
+                <p className="text-xs font-semibold text-slate-700">Nouveau paiement en masse ({filtered.length} enseignant(s) sélectionné(s))</p>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900">
+                <p className="font-semibold">Paiement et impression groupée :</p>
+                <p className="mt-0.5">Tous les paiements seront enregistrés dans la base de données, et tous les états (fiches individuelles) seront générés et imprimés en une seule fois.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">% de la tranche</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={batchPaiementForm.pourcentageTranche}
+                    onChange={(e) => setBatchPaiementForm({ ...batchPaiementForm, pourcentageTranche: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Avance à déduire (global)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={batchPaiementForm.montantAvance}
+                    onChange={(e) => setBatchPaiementForm({ ...batchPaiementForm, montantAvance: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Date de paiement</label>
+                  <input
+                    type="date"
+                    value={batchPaiementForm.datePaiement}
+                    onChange={(e) => setBatchPaiementForm({ ...batchPaiementForm, datePaiement: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Référence / Bordereau</label>
+                  <input
+                    type="text"
+                    value={batchPaiementForm.reference}
+                    onChange={(e) => setBatchPaiementForm({ ...batchPaiementForm, reference: e.target.value })}
+                    placeholder="Ex: BORD-2024-001"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setShowPaiementManagerModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">
+                  Annuler
+                </button>
+                <button
+                  onClick={handleBatchPaymentAndPrint}
+                  disabled={filtered.length === 0}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-md disabled:opacity-50"
+                >
+                  <Printer size={16} /> Enregistrer & Imprimer tous les états ({filtered.length})
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Modal Batch Print - Imprimer tous les états en une seule fois */}
+      <Modal isOpen={showBatchPrintModal} onClose={() => setShowBatchPrintModal(false)} title="🖨️ Impression Groupée – Tous les États de Paiement" size="full">
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-lg no-print shadow-sm">
+            <p className="text-sm font-semibold text-indigo-900">
+              {batchFichesData.length} état(s) de paiement enregistré(s) dans la base de données et prêts pour l&apos;impression groupée.
+            </p>
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-700 text-white rounded-lg text-sm font-bold hover:bg-indigo-800 shadow">
+              <Printer size={16} /> Imprimer tous les états en une seule fois
+            </button>
+          </div>
+
+          <div className="space-y-12">
+            {batchFichesData.map((fiche, idx) => (
+              <div key={idx} className="page-break-after pb-8 border-b-2 border-dashed border-slate-300">
+                <FicheIndividuelle data={fiche} />
+              </div>
+            ))}
+          </div>
         </div>
       </Modal>
     </div>
