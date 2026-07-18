@@ -1,0 +1,18 @@
+{
+  "id": 1,
+  "nomEtablissement": "Université de Toliara",
+  "service": "Service des Heures Complémentaires",
+  "adresse": "Avenue de l'Université, Maninday, Toliara 601",
+  "telephone": "038 34 092 61",
+  "email": "hc@univ-toliara.mg",
+  "logoEmoji": "🎓",
+  "logoType": "emoji",
+  "utiliserImprimanteThermique": false,
+  "largeurTicketMm": 80,
+  "piedTicket": "Merci de votre collaboration !",
+  "responsableNom": "RESPONSABLE HC",
+  "responsableFonction": "Chef de Service",
+  "devise": "Ariary",
+  "pays": "Madagascar",
+  "updatedAt": "2025-01-01T00:00:00.000Z"
+}
