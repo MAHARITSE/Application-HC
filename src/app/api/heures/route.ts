@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   getHeures,
-  getFacultes,
+  getStructures,
+  getParcours,
   getGrades,
   createHeure,
   updateHeure,
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       (h) => h.enseignantId === eid && h.anneeId === aid
     );
 
-    const allFacultes = getFacultes();
+    const allFacultes = getStructures();
     const allGrades = getGrades();
 
     const mapped = allHeures
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
         id: h.id,
         enseignantId: h.enseignantId,
         anneeId: h.anneeId,
-        faculteId: h.faculteId,
+        parcoursId: h.parcoursId,
         gradeId: h.gradeId,
         statut: h.statut,
         heuresET: h.heuresET,
@@ -46,8 +47,8 @@ export async function GET(request: Request) {
         heuresSoutenance: h.heuresSoutenance,
         heuresRecherche: h.heuresRecherche,
         obligation: h.obligation,
-        // jointures
-        faculte: h.faculteId ? allFacultes.find((f) => f.id === h.faculteId) || null : null,
+        // Jointure du parcours avec ses parents (établissement, domaine, mention).
+        structure: h.parcoursId ? allFacultes.find((f) => f.id === h.parcoursId) || null : null,
         grade: h.gradeId ? allGrades.find((g) => g.id === h.gradeId) || null : null,
       }));
 
@@ -65,7 +66,10 @@ export async function POST(request: Request) {
     if (!body.enseignantId) return NextResponse.json({ error: "enseignantId requis" }, { status: 400 });
     if (!body.anneeId) return NextResponse.json({ error: "anneeId requis" }, { status: 400 });
     if (!body.gradeId) return NextResponse.json({ error: "Grade obligatoire (au moment de la saisie)" }, { status: 400 });
-    if (!body.faculteId) return NextResponse.json({ error: "Faculté / Parcours obligatoire" }, { status: 400 });
+    if (!body.parcoursId) return NextResponse.json({ error: "Parcours / structure académique obligatoire" }, { status: 400 });
+    if (!getParcours().some((item) => item.id === Number(body.parcoursId))) {
+      return NextResponse.json({ error: "Parcours académique introuvable" }, { status: 400 });
+    }
     if (!body.statut) return NextResponse.json({ error: "Statut obligatoire (Permanent/Vacataire)" }, { status: 400 });
 
     const totalHeures =
@@ -88,7 +92,7 @@ export async function POST(request: Request) {
     const newHeure = createHeure({
       enseignantId: Number(body.enseignantId),
       anneeId: Number(body.anneeId),
-      faculteId: body.faculteId ? Number(body.faculteId) : null,
+      parcoursId: body.parcoursId ? Number(body.parcoursId) : null,
       gradeId: body.gradeId ? Number(body.gradeId) : null,
       statut,
       heuresET: body.heuresET != null ? Number(body.heuresET) : 0,

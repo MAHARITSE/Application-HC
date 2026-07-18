@@ -3,7 +3,6 @@
     "id": 1,
     "enseignantId": 18,
     "anneeId": 3,
-    "faculteId": 17,
     "gradeId": 2,
     "statut": "Vacataire",
     "heuresET": 0,
@@ -12,13 +11,13 @@
     "heuresSoutenance": 0,
     "heuresRecherche": 0,
     "obligation": 0,
-    "createdAt": "2026-07-18T05:30:13.317Z"
+    "createdAt": "2026-07-18T05:30:13.317Z",
+    "parcoursId": 17
   },
   {
     "id": 2,
     "enseignantId": 18,
     "anneeId": 3,
-    "faculteId": 26,
     "gradeId": 2,
     "statut": "Vacataire",
     "heuresET": 0,
@@ -27,6 +26,7 @@
     "heuresSoutenance": 0,
     "heuresRecherche": 0,
     "obligation": 0,
-    "createdAt": "2026-07-18T05:38:32.288Z"
+    "createdAt": "2026-07-18T05:38:32.288Z",
+    "parcoursId": 26
   }
 ]

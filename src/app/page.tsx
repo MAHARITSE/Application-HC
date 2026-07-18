@@ -66,9 +66,9 @@ interface EnseignantRow {
   gradeTaux: number | null;
   gradeId?: number | null;
   etablissementPrincipal: string | null;
-  faculteEtablissement?: string | null;
-  faculteDomaine?: string | null;
-  faculteMention?: string | null;
+  structureEtablissement?: string | null;
+  structureDomaine?: string | null;
+  structureMention?: string | null;
   rib: string | null;
   telephone: string | null;
   email: string | null;
@@ -113,7 +113,7 @@ interface HeureDetail {
   id: number;
   enseignantId: number;
   anneeId: number;
-  faculteId: number | null;
+  parcoursId: number | null;
   gradeId: number | null;
   statut: string;
   heuresET: number;
@@ -122,7 +122,7 @@ interface HeureDetail {
   heuresSoutenance: number;
   heuresRecherche: number;
   obligation: number;
-  faculte: Faculte | null;
+  structure: Faculte | null;
   grade: Grade | null;
 }
 
@@ -168,7 +168,7 @@ export default function HomePage() {
   const [heuresHCForm, setHeuresHCForm] = useState({
     gradeId: "",
     statut: "Vacataire" as "Permanent" | "Vacataire",
-    faculteId: "",
+    parcoursId: "",
     heuresET: 0,
     heuresED: 0,
     heuresEP: 0,
@@ -180,7 +180,7 @@ export default function HomePage() {
   // Heures detail list
   const [heuresList, setHeuresList] = useState<HeureDetail[]>([]);
   const [heuresForm, setHeuresForm] = useState({
-    faculteId: "",
+    parcoursId: "",
     gradeId: "",
     statut: "Vacataire" as "Permanent" | "Vacataire",
     heuresET: 0,
@@ -192,7 +192,7 @@ export default function HomePage() {
   });
   const [editingHeureId, setEditingHeureId] = useState<number | null>(null);
 
-  // Faculté form selon prompt.md: Etab*, Domaine*, Mention*, Parcours
+  // Structure académique : Établissement*, Domaine*, Mention*, Parcours
   const [facForm, setFacForm] = useState({
     etablissement: "",
     domaine: "",
@@ -246,7 +246,7 @@ export default function HomePage() {
   const fetchDistinct = useCallback(async (field: string, q: string) => {
     if (!q || q.length < 1) return [];
     try {
-      const res = await fetch(`/api/facultes?field=${field}&distinct=true&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/structures?field=${field}&distinct=true&q=${encodeURIComponent(q)}`);
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     } catch {
@@ -288,7 +288,7 @@ export default function HomePage() {
   }, []);
 
   const loadFacultes = useCallback(async () => {
-    const res = await fetch("/api/facultes");
+    const res = await fetch("/api/structures");
     setFacultes(await res.json());
   }, []);
 
@@ -502,7 +502,7 @@ export default function HomePage() {
     setHeuresHCForm({
       gradeId: "",
       statut: "Vacataire",
-      faculteId: "",
+      parcoursId: "",
       heuresET: 0,
       heuresED: 0,
       heuresEP: 0,
@@ -534,10 +534,10 @@ export default function HomePage() {
     setShowEnsModal(true);
   };
 
-  const buildHeuresMissingMessage = (form: { gradeId: string; faculteId: string; heuresET: number; heuresED: number; heuresEP: number; heuresSoutenance: number; heuresRecherche: number }) => {
+  const buildHeuresMissingMessage = (form: { gradeId: string; parcoursId: string; heuresET: number; heuresED: number; heuresEP: number; heuresSoutenance: number; heuresRecherche: number }) => {
     const missing: string[] = [];
     if (!form.gradeId) missing.push("Grade * (au moment de la saisie)");
-    if (!form.faculteId) missing.push("Faculté / Parcours (saisie assistée)");
+    if (!form.parcoursId) missing.push("Structure académique / parcours (saisie assistée)");
     const total = Number(form.heuresET || 0) + Number(form.heuresED || 0) + Number(form.heuresEP || 0) + Number(form.heuresSoutenance || 0) + Number(form.heuresRecherche || 0);
     if (total === 0) missing.push("Heures complémentaires : ET, ED, EP, Soutenance et Recherche sont tous égaux à 0");
     return missing.length ? `Information manquante ou incohérente :\n- ${missing.join("\n- ")}` : "";
@@ -555,7 +555,7 @@ export default function HomePage() {
       anneeId: selectedAnnee.id,
       gradeId: Number(heuresHCForm.gradeId),
       statut: heuresHCForm.statut,
-      faculteId: heuresHCForm.faculteId ? Number(heuresHCForm.faculteId) : null,
+      parcoursId: heuresHCForm.parcoursId ? Number(heuresHCForm.parcoursId) : null,
       heuresET: heuresHCForm.heuresET,
       heuresED: heuresHCForm.heuresED,
       heuresEP: heuresHCForm.heuresEP,
@@ -573,14 +573,14 @@ export default function HomePage() {
       alert(err.error || "Erreur");
       return;
     }
-    const faculteIdToKeep = heuresHCForm.faculteId;
+    const parcoursIdToKeep = heuresHCForm.parcoursId;
     setSelectedEnsForHeures(null);
     setEnsSearchQuery("");
     setEnsSearchResults([]);
     setHeuresHCForm({
       gradeId: "",
       statut: "Vacataire",
-      faculteId: faculteIdToKeep,
+      parcoursId: parcoursIdToKeep,
       heuresET: 0,
       heuresED: 0,
       heuresEP: 0,
@@ -596,7 +596,7 @@ export default function HomePage() {
     setSelectedEns(e);
     setEditingHeureId(null);
     setHeuresForm({
-      faculteId: "",
+      parcoursId: "",
       gradeId: e.gradeId ? String(e.gradeId) : grades[0]?.id ? String(grades[0].id) : "",
       statut: (e.statut as any) || "Vacataire",
       heuresET: 0,
@@ -617,7 +617,7 @@ export default function HomePage() {
   const handleEditHeure = (h: HeureDetail) => {
     setEditingHeureId(h.id);
     setHeuresForm({
-      faculteId: h.faculteId ? String(h.faculteId) : "",
+      parcoursId: h.parcoursId ? String(h.parcoursId) : "",
       gradeId: h.gradeId ? String(h.gradeId) : "",
       statut: h.statut as any,
       heuresET: h.heuresET,
@@ -644,7 +644,7 @@ export default function HomePage() {
         body: JSON.stringify({
           enseignantId: selectedEns.id,
           anneeId: selectedAnnee.id,
-          faculteId: heuresForm.faculteId ? Number(heuresForm.faculteId) : null,
+          parcoursId: heuresForm.parcoursId ? Number(heuresForm.parcoursId) : null,
           gradeId: Number(heuresForm.gradeId),
           statut: heuresForm.statut,
           heuresET: heuresForm.heuresET,
@@ -665,7 +665,7 @@ export default function HomePage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          faculteId: heuresForm.faculteId ? Number(heuresForm.faculteId) : null,
+          parcoursId: heuresForm.parcoursId ? Number(heuresForm.parcoursId) : null,
           gradeId: Number(heuresForm.gradeId),
           statut: heuresForm.statut,
           heuresET: heuresForm.heuresET,
@@ -679,10 +679,10 @@ export default function HomePage() {
     }
     if (selectedEns) handleOpenHeures(selectedEns);
     await loadEnseignants();
-    const faculteIdToKeep = heuresForm.faculteId;
+    const parcoursIdToKeep = heuresForm.parcoursId;
     setEditingHeureId(null);
     setHeuresForm({
-      faculteId: faculteIdToKeep,
+      parcoursId: parcoursIdToKeep,
       gradeId: "",
       statut: "Vacataire",
       heuresET: 0,
@@ -822,12 +822,12 @@ export default function HomePage() {
     await loadEnseignants();
   };
 
-  // ── Facultés ────────────────────────────────────────────────────────────────
+  // ── Structure académique ────────────────────────────────────────────────────────────────
   const handleSaveFac = async (e: React.FormEvent) => {
     e.preventDefault();
     setFacError("");
     try {
-      const res = await fetch("/api/facultes", {
+      const res = await fetch("/api/structures", {
         method: editingFacId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingFacId ? { ...facForm, id: editingFacId } : facForm),
@@ -859,8 +859,8 @@ export default function HomePage() {
   };
 
   const handleDeleteFac = async (id: number) => {
-    if (!confirm("Supprimer cette faculté ?")) return;
-    await fetch(`/api/facultes?id=${id}`, { method: "DELETE" });
+    if (!confirm("Supprimer cette structure académique ?")) return;
+    await fetch(`/api/structures?id=${id}`, { method: "DELETE" });
     loadFacultes();
   };
 
@@ -1036,7 +1036,7 @@ export default function HomePage() {
                 onClick={() => setShowFacModal(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-sm"
               >
-                <Building2 size={16} /> Facultés
+                <Building2 size={16} /> Structures
               </button>
               <button
                 onClick={() => setShowGradeModal(true)}
@@ -1152,8 +1152,8 @@ export default function HomePage() {
                           <td className="px-2 py-2.5 text-center">
                             <StatutBadge statut={e.statut} />
                           </td>
-                          <td className="px-2 py-2.5 text-center text-[11px] text-slate-600 max-w-[120px] truncate" title={e.faculteEtablissement || e.etablissementPrincipal || ""}>
-                            {e.faculteEtablissement || e.etablissementPrincipal || "—"}
+                          <td className="px-2 py-2.5 text-center text-[11px] text-slate-600 max-w-[120px] truncate" title={e.structureEtablissement || e.etablissementPrincipal || ""}>
+                            {e.structureEtablissement || e.etablissementPrincipal || "—"}
                           </td>
                           {[e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche].map((v, i) => (
                             <td key={i} className="px-1 py-2.5 text-center text-xs font-mono">
@@ -1413,10 +1413,10 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Faculté / Parcours (saisie assistée) *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Structure académique / parcours *</label>
                 <select
-                  value={heuresHCForm.faculteId}
-                  onChange={(e) => setHeuresHCForm({ ...heuresHCForm, faculteId: e.target.value })}
+                  value={heuresHCForm.parcoursId}
+                  onChange={(e) => setHeuresHCForm({ ...heuresHCForm, parcoursId: e.target.value })}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   <option value="">-- Sélectionner --</option>
@@ -1513,7 +1513,6 @@ export default function HomePage() {
               : undefined
           }
           etablissements={Array.from(new Set(facultes.map((f) => f.etablissement).filter(Boolean))).sort()}
-          grades={grades}
           onSave={handleSaveEns}
           onCancel={() => {
             setShowEnsModal(false);
@@ -1641,10 +1640,10 @@ export default function HomePage() {
                 />
               </div>
               <div className="sm:col-span-3">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Faculté (Établissement → Domaine → Mention → Parcours) *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (Établissement → Domaine → Mention → Parcours) *</label>
                 <select
-                  value={heuresForm.faculteId}
-                  onChange={(e) => setHeuresForm({ ...heuresForm, faculteId: e.target.value })}
+                  value={heuresForm.parcoursId}
+                  onChange={(e) => setHeuresForm({ ...heuresForm, parcoursId: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   <option value="">-- Sélectionner --</option>
@@ -1673,7 +1672,7 @@ export default function HomePage() {
                   onClick={() => {
                     setEditingHeureId(null);
                     setHeuresForm({
-                      faculteId: "",
+                      parcoursId: "",
                       gradeId: grades[0]?.id ? String(grades[0].id) : "",
                       statut: "Vacataire",
                       heuresET: 0,
@@ -1697,7 +1696,7 @@ export default function HomePage() {
             <table className="w-full text-xs sm:text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {["Grade", "Statut", "Faculté", "ET", "ED", "EP", "Sout", "Rech", "Total", "Oblig", ""].map((h) => (
+                  {["Grade", "Statut", "Structure", "ET", "ED", "EP", "Sout", "Rech", "Total", "Oblig", ""].map((h) => (
                     <th key={h} className="px-2 py-2 text-center text-[11px] font-semibold text-slate-600">
                       {h}
                     </th>
@@ -1716,7 +1715,7 @@ export default function HomePage() {
                         <StatutBadge statut={h.statut} />
                       </td>
                       <td className="px-2 py-2 text-[11px] max-w-[150px] truncate">
-                        {h.faculte ? `${h.faculte.etablissement} - ${h.faculte.mention}` : "—"}
+                        {h.structure ? `${h.structure.etablissement} - ${h.structure.mention}` : "—"}
                       </td>
                       <td className="px-1 py-2 text-center font-mono">{h.heuresET || "-"}</td>
                       <td className="px-1 py-2 text-center font-mono">{h.heuresED || "-"}</td>
@@ -1769,7 +1768,7 @@ export default function HomePage() {
             <div className="bg-slate-50 rounded-lg p-3">
               <p className="font-semibold text-sm">{selectedEns.nomPrenom}</p>
               <p className="text-xs text-slate-500">
-                {selectedEns.gradeCode} • {selectedEns.statut} • {selectedEns.etablissementPrincipal || selectedEns.faculteEtablissement}
+                {selectedEns.gradeCode} • {selectedEns.statut} • {selectedEns.etablissementPrincipal || selectedEns.structureEtablissement}
               </p>
               <p className="text-xs text-slate-500 mt-1">
                 HC: {paiementPreview.hcBrut}h brut → Oblig {paiementPreview.obligation}h → Nette {paiementPreview.hcNette}h → Arrondie{" "}
@@ -1895,16 +1894,17 @@ export default function HomePage() {
         {ficheData && <FicheIndividuelle data={ficheData as any} />}
       </Modal>
 
-      {/* Modal Facultés - conforme prompt.md avec Etablissement*, Domaine*, Mention* */}
-      <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)} title="🏛️ Gestion Facultés (Hiérarchie académique)" size="2xl">
+      {/* Modal Structure académique - quatre bases liées */}
+      <Modal isOpen={showFacModal} onClose={() => setShowFacModal(false)} title="🏛️ Gestion de la structure académique" size="2xl">
         <div className="space-y-4">
           <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs">
-            <p className="font-semibold">Règles selon prompt.md:</p>
+            <p className="font-semibold">Données séparées et liées:</p>
             <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
               <li>
                 Champs obligatoires: <strong>Établissement, Domaine, Mention</strong>
               </li>
-              <li>Optionnels: Parcours, Code</li>
+              <li>Parcours et Code sont optionnels</li>
+              <li>Les quatre bases sont séparées : établissements, domaines, mentions et parcours</li>
               <li>Vérification des doublons avant insertion</li>
               <li>Saisie assistée (autocomplete) pour tous les champs</li>
               <li>Hiérarchie: Établissement → Domaine → Mention → Parcours</li>
@@ -1989,7 +1989,7 @@ export default function HomePage() {
             {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
             <div className="flex gap-2">
               <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
-                <Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter faculté"}
+                <Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter la structure"}
               </button>
               {editingFacId && (
                 <button

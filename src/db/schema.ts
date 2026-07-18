@@ -37,32 +37,64 @@ export const grades = pgTable("grades", {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TABLE 3: Structure Académique - Facultés / Établissements
-// Hiérarchie: Établissement → Domaine → Mention → Parcours
+// TABLES 3 à 6: Structure académique normalisée
+// Établissement → Domaine → Mention → Parcours
+// Chaque niveau est stocké séparément pour éviter la répétition des libellés.
 // ═══════════════════════════════════════════════════════════════════════════
-export const facultes = pgTable(
-  "facultes",
+export const etablissements = pgTable("etablissements", {
+  id: serial("id").primaryKey(),
+  etablissement: varchar("etablissement", { length: 200 }).notNull().unique(),
+});
+
+export const domaines = pgTable(
+  "domaines",
   {
     id: serial("id").primaryKey(),
-    etablissement: varchar("etablissement", { length: 200 }).notNull(),
+    etablissementId: integer("etablissement_id")
+      .notNull()
+      .references(() => etablissements.id, { onDelete: "cascade" }),
     domaine: varchar("domaine", { length: 200 }).notNull(),
-    mention: varchar("mention", { length: 200 }).notNull(),
-    parcours: varchar("parcours", { length: 200 }),
-    code: varchar("code", { length: 20 }),
   },
   (table) => ({
-    // Unicité logique pour éviter doublons exacts
-    uniqueFac: uniqueIndex("uniq_fac_full").on(
-      table.etablissement,
-      table.domaine,
-      table.mention,
-      table.parcours
+    uniqueDomaineParEtablissement: uniqueIndex("uniq_domaine_etablissement").on(
+      table.etablissementId,
+      table.domaine
     ),
   })
 );
 
+export const mentions = pgTable(
+  "mentions",
+  {
+    id: serial("id").primaryKey(),
+    domaineId: integer("domaine_id")
+      .notNull()
+      .references(() => domaines.id, { onDelete: "cascade" }),
+    mention: varchar("mention", { length: 200 }).notNull(),
+  },
+  (table) => ({
+    uniqueMentionParDomaine: uniqueIndex("uniq_mention_domaine").on(table.domaineId, table.mention),
+  })
+);
+
+export const parcours = pgTable(
+  "parcours",
+  {
+    id: serial("id").primaryKey(),
+    mentionId: integer("mention_id")
+      .notNull()
+      .references(() => mentions.id, { onDelete: "cascade" }),
+    // Facultatif : une mention peut être sélectionnée sans parcours spécifique.
+    parcours: varchar("parcours", { length: 200 }),
+    code: varchar("code", { length: 20 }),
+  },
+  (table) => ({
+    uniqueParcoursParMention: uniqueIndex("uniq_parcours_mention").on(table.mentionId, table.parcours),
+  })
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
-// TABLE 4: Enseignants - Base permanente (infos d'identité)
+// TABLE 7: Enseignants - Base permanente (infos d'identité)
 // ⚠️ IMPORTANT: Pas de statut ni grade ici, ils sont dans heures
 // ═══════════════════════════════════════════════════════════════════════════
 export const enseignants = pgTable("enseignants", {
@@ -81,13 +113,12 @@ export const enseignants = pgTable("enseignants", {
   specialite: varchar("specialite", { length: 200 }),
   etablissementPrincipal: varchar("etablissement_principal", { length: 200 }),
   dateRecrutement: date("date_recrutement"),
-  gradeId: integer("grade_id").references(() => grades.id), // Grade AU MOMENT de la saisie (base enseignant)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TABLE 5: Heures par Année/Enseignant (CONTIENT GRADE ET STATUT)
+// TABLE 8: Heures par Année/Enseignant (CONTIENT GRADE ET STATUT)
 // Garde l'historique correct si promotion ou changement de statut
 // ═══════════════════════════════════════════════════════════════════════════
 export const heures = pgTable("heures", {
@@ -98,7 +129,7 @@ export const heures = pgTable("heures", {
   anneeId: integer("annee_id")
     .notNull()
     .references(() => annees.id, { onDelete: "cascade" }),
-  faculteId: integer("faculte_id").references(() => facultes.id),
+  parcoursId: integer("parcours_id").references(() => parcours.id),
   gradeId: integer("grade_id").references(() => grades.id), // Grade AU MOMENT
   statut: varchar("statut", { length: 20 }).notNull(), // Permanent | Vacataire AU MOMENT
   heuresET: real("heures_et").default(0),
@@ -111,7 +142,7 @@ export const heures = pgTable("heures", {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TABLE 6: Paiements - Avances et Paiements par Tranches
+// TABLE 9: Paiements - Avances et Paiements par Tranches
 // ═══════════════════════════════════════════════════════════════════════════
 export const paiements = pgTable("paiements", {
   id: serial("id").primaryKey(),

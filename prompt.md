@@ -1,118 +1,164 @@
-# HC-Manager — Application de Gestion des Heures Complémentaires
+# HC-Manager — Gestion des heures complémentaires
 
-## Description du Projet
+## Objet et état actuel
 
-Application web moderne pour gérer les heures complémentaires des enseignants du supérieur à Madagascar. Développée avec Next.js (App Router), PostgreSQL via Drizzle ORM, et Tailwind CSS.
+HC-Manager est une application web de gestion des heures complémentaires des enseignants du supérieur à Madagascar. Elle est développée avec **Next.js App Router**, TypeScript et Tailwind CSS.
+
+> **Persistance active :** l'application fonctionne actuellement en mode **JSON-only**. Les données sont versionnées dans `data/*.json` et sont lues/écrites par `src/db/jsonStore.ts`. Le fichier `src/db/schema.ts` documente le schéma PostgreSQL/Drizzle cible, mais PostgreSQL n'est pas requis à l'exécution.
 
 ---
 
-## Architecture de la Base de Données
+## Architecture des données
 
-### Tables principales
+### Fichiers de données actifs
 
-#### 1. `annees` — Années Universitaires
-```sql
-- id: serial PRIMARY KEY
-- libelle: varchar(50) UNIQUE (ex: "2024-2025")
-- tranche: varchar(100) (ex: "Première tranche", "Deuxième tranche")
-- active: boolean (année en cours)
-- appliquerIRSA: boolean (option IRSA par année)
-- tauxIRSA: real (taux en %, défaut 20)
-- plafondPaiement: numeric (plafond étatique optionnel)
+| Collection | Fichier | Rôle |
+|---|---|---|
+| Années universitaires | `data/annees.json` | Année, tranche, IRSA, plafond et formule HC |
+| Grades | `data/grades.json` | Codes, libellés et taux horaires |
+| Établissements | `data/etablissements.json` | Premier niveau de la structure académique |
+| Domaines | `data/domaines.json` | Domaines rattachés à un établissement |
+| Mentions | `data/mentions.json` | Mentions rattachées à un domaine |
+| Parcours | `data/parcours.json` | Parcours rattachés à une mention ; feuille de sélection des HC |
+| Enseignants | `data/enseignants.json` | Informations personnelles et permanentes |
+| Heures | `data/heures.json` | Heures, grade, statut et obligation historiques |
+| Paiements | `data/paiements.json` | Avances et versements par tranche |
+
+### Hiérarchie académique séparée
+
+La structure académique n'est **plus** enregistrée dans une unique table `facultes` qui répétait les quatre libellés. Elle est normalisée ainsi :
+
+```text
+Établissement 1 ──< Domaine ──< Mention ──< Parcours
 ```
 
-#### 2. `grades` — Grades et Taux Horaires
+Les trois premiers libellés sont obligatoires. Le parcours est facultatif : lorsqu'une mention n'a pas de parcours nommé, une feuille `parcours` avec une valeur `null` est créée afin que chaque ligne d'heures puisse tout de même référencer une structure précise.
+
+#### 1. `etablissements`
+
 ```sql
 - id: serial PRIMARY KEY
-- code: varchar(10) UNIQUE (A, MC, PR, PRT)
-- libelle: varchar(100)
-- tauxHoraire: integer (en Ariary)
+- etablissement: varchar(200) NOT NULL UNIQUE
 ```
 
-**Taux par défaut:**
-| Grade | Libellé | Taux |
-|-------|---------|------|
+#### 2. `domaines`
+
+```sql
+- id: serial PRIMARY KEY
+- etablissementId: integer NOT NULL REFERENCES etablissements(id) ON DELETE CASCADE
+- domaine: varchar(200) NOT NULL
+- UNIQUE(etablissementId, domaine)
+```
+
+#### 3. `mentions`
+
+```sql
+- id: serial PRIMARY KEY
+- domaineId: integer NOT NULL REFERENCES domaines(id) ON DELETE CASCADE
+- mention: varchar(200) NOT NULL
+- UNIQUE(domaineId, mention)
+```
+
+#### 4. `parcours`
+
+```sql
+- id: serial PRIMARY KEY
+- mentionId: integer NOT NULL REFERENCES mentions(id) ON DELETE CASCADE
+- parcours: varchar(200)                 -- facultatif
+- code: varchar(20)                      -- facultatif, conservé pour les codes internes
+- UNIQUE(mentionId, parcours)
+```
+
+**Règles de la structure :**
+
+- `etablissement`, `domaine` et `mention` sont obligatoires et limités à 200 caractères.
+- Un domaine n'existe que pour un établissement donné ; une mention n'existe que pour un domaine donné.
+- Un parcours est la feuille de la hiérarchie et est l'élément référencé dans les heures.
+- Les doublons sont contrôlés sans tenir compte de la casse.
+- L'ancien fichier `data/facultes.json` est migré automatiquement, si présent dans une installation existante, sans changer les identifiants des parcours. Cela préserve les liens des heures existantes.
+- La suppression d'un parcours utilisé dans des heures est refusée pour éviter une donnée orpheline.
+
+### Tables métier
+
+#### 5. `annees` — Années universitaires
+
+```sql
+- id: serial PRIMARY KEY
+- libelle: varchar(50) UNIQUE            -- ex. « 2025-2026 »
+- tranche: varchar(100)                  -- ex. « Première tranche »
+- active: boolean
+- appliquerIRSA: boolean
+- tauxIRSA: real                          -- pourcentage, défaut 20
+- plafondPaiement: numeric                -- optionnel
+- formuleHC: varchar                      -- optionnelle ; formule par année
+```
+
+#### 6. `grades` — Grades et taux horaires
+
+```sql
+- id: serial PRIMARY KEY
+- code: varchar(10) UNIQUE                -- A, MC, PR, PRT
+- libelle: varchar(100) NOT NULL
+- tauxHoraire: integer NOT NULL           -- Ariary
+```
+
+| Code | Libellé | Taux par défaut |
+|---|---|---:|
 | A | Assistant | 6 000 Ar |
 | MC | Maître de Conférences | 8 000 Ar |
 | PR | Professeur | 10 000 Ar |
 | PRT | Professeur Titulaire | 12 000 Ar |
 
-#### 3. `facultes` — Structure Académique (Hiérarchie)
+#### 7. `enseignants` — Informations permanentes
+
 ```sql
 - id: serial PRIMARY KEY
-- etablissement: varchar(200) NOT NULL *
-- domaine: varchar(200) NOT NULL *
-- mention: varchar(200) NOT NULL *
-- parcours: varchar(200)
-- niveau: varchar(50)
-- code: varchar(20)
-```
-
-**Règles:**
-- Champs obligatoires: Établissement, Domaine, Mention
-- Champs optionnels: Parcours, Niveau
-- Vérification des doublons avant insertion
-- Saisie assistée (autocomplete) pour tous les champs
-- Hiérarchie: Établissement → Domaine → Mention → Parcours → Niveau
-
-#### 4. `enseignants` — Base des Enseignants (informations permanentes)
-```sql
-- id: serial PRIMARY KEY
-- nom: varchar(150) NOT NULL          -- Toujours en MAJUSCULES *
-- prenom: varchar(200)                 -- Title Case (pas obligatoire)
+- nom: varchar(150) NOT NULL              -- MAJUSCULES automatiques
+- prenom: varchar(200)                    -- Title Case, optionnel
 - cin: varchar(50)
-- dateCIN: date                        -- Date de délivrance du CIN
+- dateCIN: date
 - dateNaissance: date
 - lieuNaissance: varchar(200)
 - nationalite: varchar(100) DEFAULT 'Malagasy'
-- adresse: text                        -- Title Case
-- telephone: varchar(20)               -- Format: 000 00 000 00
+- adresse: text                           -- Title Case
+- telephone: varchar(20)                  -- 000 00 000 00
 - email: varchar(200)
-- rib: varchar(30)                     -- Format: 00005 00001 12094250100 09
+- rib: varchar(30)                        -- 00005 00001 12094250100 09
 - specialite: varchar(200)
 - etablissementPrincipal: varchar(200)
 - dateRecrutement: date
 ```
 
-**⚠️ IMPORTANT:** 
-- Le **statut** (Permanent/Vacataire) n'est PAS dans cette table
-- Le **grade** n'est PAS dans cette table
-- Ces informations sont saisies lors de la saisie des HC car elles peuvent changer
+> Le **grade** et le **statut** ne sont pas stockés dans la fiche permanente de l'enseignant. Ils sont saisis avec chaque ligne d'heures, afin de préserver l'historique.
 
-**Règles de formatage:**
-- `nom`: Automatiquement converti en MAJUSCULES (obligatoire)
-- `prenom`: Title Case - première lettre de chaque mot en majuscule (optionnel)
-- `adresse`: Title Case
-- `telephone`: Masque de saisie `000 00 000 00`
-- `rib`: Masque de saisie `00005 00001 12094250100 09`
+#### 8. `heures` — Heures par enseignant et année
 
-#### 5. `heures` — Heures par Année/Enseignant (CONTIENT GRADE ET STATUT)
 ```sql
 - id: serial PRIMARY KEY
-- enseignantId: integer REFERENCES enseignants(id) ON DELETE CASCADE
-- anneeId: integer REFERENCES annees(id) ON DELETE CASCADE
-- faculteId: integer REFERENCES facultes(id)
-- gradeId: integer REFERENCES grades(id)    -- Grade AU MOMENT de la saisie
-- statut: varchar(20) NOT NULL              -- Permanent | Vacataire AU MOMENT de la saisie
+- enseignantId: integer NOT NULL REFERENCES enseignants(id) ON DELETE CASCADE
+- anneeId: integer NOT NULL REFERENCES annees(id) ON DELETE CASCADE
+- parcoursId: integer REFERENCES parcours(id)
+- gradeId: integer REFERENCES grades(id)
+- statut: varchar(20) NOT NULL            -- Permanent | Vacataire
 - heuresET: real DEFAULT 0
 - heuresED: real DEFAULT 0
 - heuresEP: real DEFAULT 0
 - heuresSoutenance: real DEFAULT 0
 - heuresRecherche: real DEFAULT 0
-- obligation: real DEFAULT 125              -- Défaut 125h, 0 pour vacataires
+- obligation: real DEFAULT 125
 ```
 
-**⚠️ IMPORTANT:**
-- Le **gradeId** est stocké ICI car un enseignant peut changer de grade au fil des années
-- Le **statut** est stocké ICI car il peut aussi changer
-- Cela permet de garder l'historique correct des anciennes années
-- L'**obligation** est saisie ici (défaut 125h, pas obligatoire, 0 pour vacataires)
+- `parcoursId` remplace l'ancien `faculteId`.
+- Une ligne d'heures doit cibler un parcours/une structure existante, un grade et un statut.
+- Le grade, le statut et l'obligation sont les valeurs **au moment de la saisie**.
+- L'obligation par défaut est de 125 h pour un permanent et de 0 h pour un vacataire.
 
-#### 6. `paiements` — Avances et Paiements par Tranches
+#### 9. `paiements` — Avances et paiements par tranches
+
 ```sql
 - id: serial PRIMARY KEY
-- enseignantId: integer REFERENCES enseignants(id)
-- anneeId: integer REFERENCES annees(id)
+- enseignantId: integer NOT NULL REFERENCES enseignants(id) ON DELETE CASCADE
+- anneeId: integer NOT NULL REFERENCES annees(id) ON DELETE CASCADE
 - montantAvance: real DEFAULT 0
 - dateAvance: date
 - pourcentageTranche: real
@@ -124,226 +170,126 @@ Application web moderne pour gérer les heures complémentaires des enseignants 
 
 ---
 
-## Règles de Gestion
+## Règles métier
 
-### Calcul des Heures Complémentaires
+### Calcul des heures complémentaires
 
-```
-HC Brut = ET + ED + EP + Soutenance + Recherche
+```text
+HC Brut = formuleHC de l'année
+          (formule par défaut : ET + ED + EP + Soutenance + Recherche)
 
-Obligation = valeur saisie (défaut 125h, 0 pour vacataires)
-
-Si statut = "Permanent" ET obligation > 0:
-    HC Nette = max(0, HC Brut - Obligation)
-Sinon (Vacataire ou obligation = 0):
+Si statut = « Permanent » et obligation > 0 :
+    HC Nette = max(0, HC Brut - obligation)
+Sinon :
     HC Nette = HC Brut
 
 HC Arrondie = floor(HC Nette)
+Montant Brut = HC Arrondie × taux horaire du grade historique
 
-Montant Brut = HC Arrondie × Taux Horaire (selon grade STOCKÉ dans heures)
-
-Si plafond défini ET Montant Brut > plafond:
+Si un plafond est défini et Montant Brut > plafond :
     Montant Brut = plafond
 
-Si appliquerIRSA = true:
-    IRSA = Montant Brut × (tauxIRSA / 100)
-Sinon:
-    IRSA = 0
-
+IRSA = Montant Brut × tauxIRSA / 100, seulement si appliquerIRSA = true
 Montant Net = Montant Brut - IRSA
-Net à Payer = Montant Net - Total Avances
+Reste à payer = Montant Net - avances - montants déjà versés
 ```
 
-### Pourquoi stocker Grade et Statut dans les Heures?
-- Un enseignant Assistant (A) peut devenir Maître de Conférences (MC)
-- Un Vacataire peut devenir Permanent
-- Les anciennes années doivent garder le grade/statut DE L'ÉPOQUE
-- Sinon les calculs seraient faussés rétroactivement
+### Historique indispensable
+
+Un enseignant peut changer de grade ou de statut d'une année à l'autre. Les valeurs sont donc sauvegardées dans `heures`, et non dans `enseignants`. Les calculs d'anciennes années restent ainsi exacts.
 
 ---
 
-## Fonctionnalités de l'Interface
+## Interface utilisateur
 
-### En-tête
-- Logo "HC-Manager"
-- Sélecteur d'année (se place sur la DERNIÈRE année au lancement)
-- Indicateur de tranche
-- Indicateur IRSA (rouge/vert)
-- Accès paramètres
+### En-tête et tableau principal
 
-### Barre d'outils principale
-- 🔍 Recherche
-- Filtres (statut, grade)
-- **📋 Saisir Heures** — Bouton principal
-- **🏛️ Facultés** — Gestion des facultés
-- **👥 Enseignants** — Liste de TOUS les enseignants (NOUVEAU)
-- **🎓 Grades** — Gestion des grades
+- Sélecteur d'année : la dernière année est sélectionnée au lancement.
+- Badge de tranche et indicateur IRSA (appliqué ou non).
+- Recherche par nom, prénom, CIN ou établissement ; filtres de statut et de grade.
+- Le tableau regroupe les heures par enseignant et affiche le grade/statut historiques, l'établissement, les volumes ET/ED/EP/soutenance/recherche, HC, obligation, IRSA et montants.
 
-### Bouton "Enseignants" (NOUVEAU)
-- Affiche la liste complète de TOUS les enseignants de la base
-- Recherche par nom/prénom
-- Permet de:
-  - Voir les détails
-  - Modifier les informations (nom, prénom, CIN, contact, RIB...)
-  - Supprimer un enseignant
-- Utile pour mettre à jour les informations de base
+### Bouton « Structures »
 
-### Bouton "Saisir Heures" (Principal)
-- Modal grande taille
-- **Étape 1: Rechercher/Créer l'enseignant**
-  - Autocomplete sur la base
-  - Bouton "Créer" visible directement
-  - Si création: formulaire avec infos de base (nom, prénom, contact...)
-  
-- **Étape 2: Saisir les informations HC**
-  - **Grade** * (sélection obligatoire) — stocké dans heures
-  - **Statut** * (Permanent/Vacataire) — stocké dans heures
-  - Faculté (saisie assistée)
-  - Heures: ET, ED, EP, Soutenance, Recherche
-  - **Obligation** (défaut 125h, mettre 0 pour vacataire)
+Le bouton **🏛️ Structures** ouvre la gestion de la hiérarchie académique.
 
-### Bouton "Facultés"
-- Affiche la liste des facultés/parcours
-- Formulaire d'ajout avec saisie assistée:
-  - Établissement * (obligatoire)
-  - Domaine * (obligatoire)
-  - Mention * (obligatoire)
-  - Parcours (optionnel)
-  - Niveau (optionnel)
-- Vérification doublons
-- Suppression possible
+- Les champs proposés sont **Établissement***, **Domaine***, **Mention***, **Parcours** et **Code**.
+- La saisie assistée cherche dans les quatre bases séparées.
+- L'enregistrement crée, si nécessaire, les parents de la hiérarchie et le parcours feuille.
+- La liste affichée est une vue aplatie de `Établissement → Domaine → Mention → Parcours` : elle ne correspond pas à une table de persistance unique.
+- La modification et la suppression sont disponibles ; une structure utilisée par des heures ne peut pas être supprimée.
 
-### Tableau Principal
-Colonnes:
-- N°
-- Nom et Prénoms
-- **Grade** (celui stocké dans heures)
-- **Statut** (celui stocké dans heures)
-- Établissement
-- ET, ED, EP, Sout., Rech.
-- HC Brut
-- Obligation
-- HC Net
-- Brut (Ar)
-- IRSA
-- Net (Ar)
-- Actions
+### Bouton « Saisir Heures »
 
-### Actions par ligne
-- ✏️ Modifier (infos enseignant)
-- 📊 Heures (gérer les heures)
-- 💰 Paiement (préparer paiement)
-- 📄 Fiche (générer PDF)
-- 🗑️ Supprimer
+1. Rechercher un enseignant ou créer sa fiche permanente.
+2. Saisir les informations historiques de la ligne HC :
+   - grade obligatoire ;
+   - statut obligatoire ;
+   - parcours/structure académique obligatoire ;
+   - ET, ED, EP, soutenance, recherche et obligation.
 
-### Formulaire Enseignant (Informations de base)
-**Section Identité:**
-- Nom * (MAJUSCULES automatiques)
-- Prénom (Title Case, optionnel)
-- CIN
-- Date CIN
-- Date de naissance
-- Lieu de naissance
-- Nationalité (défaut: Malagasy)
+Les sélecteurs affichent la hiérarchie complète, mais la valeur enregistrée est le `parcoursId` de la feuille sélectionnée.
 
-**Section Contact:**
-- Téléphone (masque: 000 00 000 00)
-- Email
-- Adresse (Title Case)
-- RIB (masque: 00005 00001 12094250100 09)
+### Bouton « Enseignants »
 
-**Section Professionnelle:**
-- Spécialité
-- Établissement principal
-- Date de recrutement
+- Liste indépendante de l'année, pour l'ensemble de la base des enseignants.
+- Modification des informations permanentes : identité, CIN, coordonnées, RIB, spécialité et établissement principal.
+- Le formulaire n'affiche ni grade ni statut.
 
-**⚠️ PAS de Grade ni Statut ici** — ces infos sont dans la saisie HC
+### Paiements et fiches
 
-### Formulaire Saisie HC
-- Enseignant (recherche/sélection)
-- **Grade** * (A, MC, PR, PRT)
-- **Statut** * (Permanent, Vacataire)
-- Faculté (saisie assistée)
-- Heures: ET, ED, EP, Soutenance, Recherche
-- **Obligation** (défaut 125h)
+- Paiement individuel ou par tranche avec calcul de la part, des avances et du reste à payer.
+- Fiche individuelle avec détails par structure (établissement, domaine, mention, parcours), calculs et montant en lettres.
+- Exports base, fiche et Excel utilisent la hiérarchie normalisée via la vue de parcours.
 
 ---
 
-## Masques de Saisie
+## Normalisation et masques
 
-| Champ | Format | Exemple | Auto |
-|-------|--------|---------|------|
-| Nom | MAJUSCULES | RAKOTO | Oui |
-| Prénom | Title Case | Jean Pierre | Oui |
-| Téléphone | 000 00 000 00 | 034 12 345 67 | Masque |
-| RIB | 00005 00001 12094250100 09 | 00005 00001 12094250100 09 | Masque |
-| Adresse | Title Case | Lot II A 25 Andravohangy | Oui |
+| Champ | Règle |
+|---|---|
+| Nom | MAJUSCULES automatiques |
+| Prénom et adresse | Title Case automatique |
+| Téléphone | Masque `000 00 000 00` |
+| RIB | Masque `00005 00001 12094250100 09` |
+| Établissement, domaine, mention, parcours | Libellés réutilisables, contrôle de doublons insensible à la casse |
 
 ---
 
-## API Routes
+## API
 
 | Route | Méthodes | Description |
-|-------|----------|-------------|
-| `/api/seed` | POST | Initialisation |
-| `/api/annees` | GET, POST, PUT | Années (avec IRSA) |
-| `/api/grades` | GET, PUT | Grades et taux |
-| `/api/facultes` | GET, POST, DELETE | Facultés avec vérif doublons |
-| `/api/enseignants` | GET, POST | Liste et création |
-| `/api/enseignants/[id]` | GET, PUT, DELETE | CRUD enseignant |
-| `/api/heures` | GET, POST | Heures (avec grade/statut) |
-| `/api/heures/[id]` | PUT, DELETE | Modification heures |
-| `/api/paiements` | GET, POST | Paiements |
-| `/api/export/fiche` | GET | Fiche individuelle |
+|---|---|---|
+| `/api/seed` | POST | Initialise les données de référence si elles sont absentes |
+| `/api/annees` | GET, POST, PUT | Années, IRSA, plafond et formule HC |
+| `/api/grades` | GET, POST, PUT | Grades et taux horaires |
+| `/api/structures` | GET, POST, PUT, DELETE | Structure académique normalisée ; `?view=hierarchy` renvoie les quatre bases et `?level=` permet de les consulter séparément |
+| `/api/facultes` | GET, POST, PUT, DELETE | Alias historique compatible de `/api/structures` |
+| `/api/enseignants` | GET, POST | Liste globale ou agrégée par année, création |
+| `/api/enseignants/[id]` | GET, PUT, DELETE | Consultation, modification et suppression en cascade |
+| `/api/heures` | GET, POST | Lignes HC avec `parcoursId`, grade et statut historiques |
+| `/api/heures/[id]` | GET, PUT, DELETE | Modification ou suppression d'une ligne HC |
+| `/api/paiements` | GET, POST | Paiements et avances |
+| `/api/export/base` | GET | Base agrégée par année |
+| `/api/export/excel` | GET | Export Excel |
+| `/api/export/fiche` | GET | Fiche individuelle par année |
 
 ---
 
-## Workflow Utilisateur
+## Compatibilité et migration
 
-### 1. Configuration
-- Créer/configurer l'année
-- Activer/désactiver IRSA
-- Vérifier grades et taux
-
-### 2. Gestion Facultés
-- Cliquer "Facultés"
-- Ajouter: Établissement → Domaine → Mention → Parcours
-- Saisie assistée + vérif doublons
-
-### 3. Saisie HC
-- Cliquer "Saisir Heures"
-- Rechercher enseignant (ou créer)
-- **Sélectionner Grade et Statut** (stockés avec les heures)
-- Sélectionner faculté
-- Saisir heures + obligation
-
-### 4. Mise à jour Enseignant
-- Cliquer "Enseignants"
-- Rechercher l'enseignant
-- Modifier ses infos (contact, RIB, etc.)
-
-### 5. Paiements
-- Cliquer 💰 sur un enseignant
-- Vérifier détection IRSA/tranche
-- Saisir pourcentage
-- Valider
-
-### 6. Fiches
-- Cliquer 📄
-- Saisir N° état
-- Imprimer/PDF
+- Les données actuelles de structure sont distribuées dans `etablissements.json`, `domaines.json`, `mentions.json` et `parcours.json`.
+- Les identifiants de parcours ont été conservés lors de la séparation ; les heures existantes ont été converties de `faculteId` vers `parcoursId`.
+- Une installation possédant encore `data/facultes.json` est automatiquement convertie lors du premier accès à la structure académique.
+- `/api/facultes` est gardée comme route historique pour les clients existants, tandis que l'application utilise `/api/structures`.
 
 ---
 
-## Points Clés
+## Validation attendue
 
-| Concept | Explication |
-|---------|-------------|
-| Grade dans Heures | Permet de garder l'historique si promotion |
-| Statut dans Heures | Permet de garder l'historique si changement |
-| Obligation dans Heures | Défaut 125h, modifiable, 0 pour vacataire |
-| Bouton Enseignants | Pour voir/modifier TOUS les enseignants |
-| Saisie assistée | Partout (enseignants, facultés) |
-| Vérif doublons | Facultés et enseignants |
-| IRSA par année | Activable/désactivable |
-| Dernière année | Sélectionnée par défaut au lancement |
+```bash
+npm run typecheck
+npm run build
+```
+
+Les deux commandes doivent réussir. La vérification manuelle essentielle consiste à consulter `/api/structures?view=hierarchy`, à créer une structure, puis à l'utiliser dans une ligne d'heures : la ligne doit enregistrer un `parcoursId` et restituer correctement établissement, domaine, mention et parcours.

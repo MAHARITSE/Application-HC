@@ -1,0 +1,127 @@
+[
+  {
+    "id": 1,
+    "etablissementId": 1,
+    "domaine": "Sciences et Technologies"
+  },
+  {
+    "id": 2,
+    "etablissementId": 1,
+    "domaine": "Lettres et Sciences Humaines"
+  },
+  {
+    "id": 3,
+    "etablissementId": 2,
+    "domaine": "Sciences de l'Éducation"
+  },
+  {
+    "id": 4,
+    "etablissementId": 3,
+    "domaine": "Sciences de la Mer"
+  },
+  {
+    "id": 5,
+    "etablissementId": 1,
+    "domaine": "Droit, Economie, Gestion"
+  },
+  {
+    "id": 6,
+    "etablissementId": 4,
+    "domaine": "Environnement"
+  },
+  {
+    "id": 7,
+    "etablissementId": 5,
+    "domaine": "Sciences de la Vie"
+  },
+  {
+    "id": 8,
+    "etablissementId": 6,
+    "domaine": "Lettres"
+  },
+  {
+    "id": 9,
+    "etablissementId": 7,
+    "domaine": "Agronomie"
+  },
+  {
+    "id": 10,
+    "etablissementId": 6,
+    "domaine": "Géographie"
+  },
+  {
+    "id": 11,
+    "etablissementId": 5,
+    "domaine": "Chimie"
+  },
+  {
+    "id": 12,
+    "etablissementId": 5,
+    "domaine": "Physique"
+  },
+  {
+    "id": 13,
+    "etablissementId": 8,
+    "domaine": "Environnement"
+  },
+  {
+    "id": 14,
+    "etablissementId": 9,
+    "domaine": "Gestion"
+  },
+  {
+    "id": 15,
+    "etablissementId": 9,
+    "domaine": "Droit"
+  },
+  {
+    "id": 16,
+    "etablissementId": 6,
+    "domaine": "Malagasy"
+  },
+  {
+    "id": 17,
+    "etablissementId": 10,
+    "domaine": "Arts et Lettres"
+  },
+  {
+    "id": 18,
+    "etablissementId": 11,
+    "domaine": "Enseignement"
+  },
+  {
+    "id": 19,
+    "etablissementId": 6,
+    "domaine": "Philosophie"
+  },
+  {
+    "id": 20,
+    "etablissementId": 5,
+    "domaine": "Biodiversité"
+  },
+  {
+    "id": 21,
+    "etablissementId": 12,
+    "domaine": "Sciences de Santé"
+  },
+  {
+    "id": 22,
+    "etablissementId": 10,
+    "domaine": "Sciences et Technologies"
+  },
+  {
+    "id": 23,
+    "etablissementId": 6,
+    "domaine": "Histoire"
+  },
+  {
+    "id": 24,
+    "etablissementId": 5,
+    "domaine": "Sciences de la Terre"
+  },
+  {
+    "id": 25,
+    "etablissementId": 3,
+    "domaine": "Sciences Marines"
+  }
+]

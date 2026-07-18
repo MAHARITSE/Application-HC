@@ -4,8 +4,8 @@ import {
   saveGrades,
   getAnnees,
   saveAnnees,
-  getFacultes,
-  saveFacultes,
+  getStructures,
+  saveStructures,
   getEnseignants,
   saveEnseignants,
 } from "@/db";
@@ -48,9 +48,9 @@ export async function POST() {
     }
     saveAnnees(annees);
 
-    // Seed facultés (sans niveau)
-    let facultes = getFacultes();
-    const facultesData = [
+    // Seed structures académiques (sans niveau)
+    let structures = getStructures();
+    const structuresData = [
       { etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Génie Logiciel", code: "UT-ST-INFO-GL" },
       { etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Informatique", parcours: "Réseaux et Systèmes", code: "UT-ST-INFO-RS" },
       { etablissement: "Université de Toliara", domaine: "Sciences et Technologies", mention: "Mathématiques", parcours: "Mathématiques Appliquées", code: "UT-ST-MATH-MA" },
@@ -59,7 +59,7 @@ export async function POST() {
       { etablissement: "ENS Toliara", domaine: "Sciences de l'Éducation", mention: "Sciences Physiques", parcours: "Physique-Chimie", code: "ENS-SE-SP-PC" },
       { etablissement: "IHSM", domaine: "Sciences de la Mer", mention: "Oceanographie", parcours: "Halieutique", code: "IHSM-SM-OCEAN-HAL" },
       { etablissement: "Université de Toliara", domaine: "Droit, Economie, Gestion", mention: "Droit Public", parcours: "Droit Public Interne", code: "UT-DEG-DPUB" },
-      // Nouvelles facultés basées sur les données enseignants fournies
+      // Nouvelles structures académiques basées sur les données enseignants fournies
       { etablissement: "IES-Menabe", domaine: "Environnement", mention: "Technique de l'Environnement", parcours: null, code: "IES-MEN-ENV" },
       { etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null, code: "SCI-SV" },
       { etablissement: "Fac Lettres", domaine: "Lettres", mention: "Etude Francçaise et francophones", parcours: null, code: "FL-EFF" },
@@ -83,12 +83,12 @@ export async function POST() {
       { etablissement: "SCIENCES", domaine: "Sciences de la Vie", mention: "Sciences de la Vie", parcours: null, code: "SCI-SV2" },
     ];
 
-    if (facultes.length === 0) {
-      let nextId = Math.max(0, ...facultes.map((f) => f.id)) + 1;
-      for (const f of facultesData) {
-        facultes.push({ id: nextId++, ...f });
+    if (structures.length === 0) {
+      let nextId = Math.max(0, ...structures.map((f) => f.id)) + 1;
+      for (const f of structuresData) {
+        structures.push({ id: nextId++, ...f });
       }
-      saveFacultes(facultes);
+      saveStructures(structures);
     }
 
     // Seed enseignants - liste fournie
@@ -162,7 +162,7 @@ export async function POST() {
       message: "Base de données initialisée avec succès (JSON-only)",
       grades: getGrades().length,
       annees: getAnnees().length,
-      facultes: getFacultes().length,
+      structures: getStructures().length,
       enseignants: getEnseignants().length,
     });
   } catch (error: unknown) {

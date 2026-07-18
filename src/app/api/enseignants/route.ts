@@ -5,7 +5,7 @@ import {
   getHeures,
   getGrades,
   getPaiements,
-  getFacultes,
+  getStructures,
   createEnseignant,
   updateEnseignant,
   deleteEnseignant,
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
     const allHeures = getHeures().filter((h) => h.anneeId === anneeIdNum);
     const allGrades = getGrades();
-    const allFacultes = getFacultes();
+    const allFacultes = getStructures();
     const allPaiements = getPaiements().filter((p) => p.anneeId === anneeIdNum);
 
     // Paiements groupés par enseignant (avances, payé, % tranche cumulé)
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
       cur.dernierStatut = h.statut || cur.dernierStatut;
       cur.derniereObligation = h.obligation ?? cur.derniereObligation;
 
-      const fac = h.faculteId ? allFacultes.find((f) => f.id === h.faculteId) : null;
+      const fac = h.parcoursId ? allFacultes.find((f) => f.id === h.parcoursId) : null;
       cur.dernierFaculte = fac || cur.dernierFaculte;
 
       map.set(eid, cur);
@@ -146,9 +146,9 @@ export async function GET(request: Request) {
         gradeTaux: agg.dernierGrade?.tauxHoraire || null,
         gradeId: agg.dernierGrade?.id || null,
         statut: agg.dernierStatut || "Vacataire",
-        faculteEtablissement: agg.dernierFaculte?.etablissement || e.etablissementPrincipal,
-        faculteDomaine: agg.dernierFaculte?.domaine || null,
-        faculteMention: agg.dernierFaculte?.mention || null,
+        structureEtablissement: agg.dernierFaculte?.etablissement || e.etablissementPrincipal,
+        structureDomaine: agg.dernierFaculte?.domaine || null,
+        structureMention: agg.dernierFaculte?.mention || null,
         // Totaux heures
         total_et: agg.total_et,
         total_ed: agg.total_ed,
@@ -230,7 +230,6 @@ export async function POST(request: Request) {
       specialite: body.specialite?.trim() || null,
       etablissementPrincipal: body.etablissementPrincipal?.trim() || null,
       dateRecrutement: body.dateRecrutement || null,
-      gradeId: body.gradeId ? Number(body.gradeId) : null,
     });
 
     return NextResponse.json(newEns);

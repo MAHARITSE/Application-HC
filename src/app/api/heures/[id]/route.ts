@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getHeures, updateHeure, deleteHeure } from "@/db";
+import { getHeures, getParcours, updateHeure, deleteHeure } from "@/db";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,8 +9,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.gradeId !== undefined && !body.gradeId) {
       return NextResponse.json({ error: "Grade obligatoire" }, { status: 400 });
     }
-    if (body.faculteId !== undefined && !body.faculteId) {
-      return NextResponse.json({ error: "Faculté / Parcours obligatoire" }, { status: 400 });
+    if (body.parcoursId !== undefined && !body.parcoursId) {
+      return NextResponse.json({ error: "Parcours / structure académique obligatoire" }, { status: 400 });
+    }
+    if (body.parcoursId !== undefined && !getParcours().some((item) => item.id === Number(body.parcoursId))) {
+      return NextResponse.json({ error: "Parcours académique introuvable" }, { status: 400 });
     }
     const totalHeures =
       Number(body.heuresET || 0) +
@@ -23,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const updateData: Record<string, any> = {};
-    if (body.faculteId !== undefined) updateData.faculteId = body.faculteId ? Number(body.faculteId) : null;
+    if (body.parcoursId !== undefined) updateData.parcoursId = body.parcoursId ? Number(body.parcoursId) : null;
     if (body.gradeId !== undefined) updateData.gradeId = body.gradeId ? Number(body.gradeId) : null;
     if (body.statut !== undefined) updateData.statut = body.statut;
     if (body.heuresET !== undefined) updateData.heuresET = Number(body.heuresET) || 0;

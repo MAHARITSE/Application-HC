@@ -3,7 +3,7 @@ import {
   getEnseignants,
   getGrades,
   getHeures,
-  getFacultes,
+  getStructures,
   getAnnees,
   getPaiements,
 } from "@/db";
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       .filter((h) => h.enseignantId === eid && h.anneeId === aid)
       .map((h) => ({
         heures: h,
-        faculte: h.faculteId ? getFacultes().find((f) => f.id === h.faculteId) : null,
+        structure: h.parcoursId ? getStructures().find((f) => f.id === h.parcoursId) : null,
         grade: h.gradeId ? getGrades().find((g) => g.id === h.gradeId) : null,
       }));
 
@@ -70,13 +70,13 @@ export async function GET(request: Request) {
       if (h.heures.statut) refStatut = h.heures.statut;
       if (h.heures.obligation != null) refObligation = h.heures.obligation;
 
-      const etabKey = h.faculte?.etablissement || "Non spécifié";
+      const etabKey = h.structure?.etablissement || "Non spécifié";
       if (!detailsParFaculte[etabKey]) detailsParFaculte[etabKey] = [];
       detailsParFaculte[etabKey].push({
-        etablissement: h.faculte?.etablissement || etabKey,
-        domaine: h.faculte?.domaine || "",
-        mention: h.faculte?.mention || "",
-        parcours: h.faculte?.parcours || "",
+        etablissement: h.structure?.etablissement || etabKey,
+        domaine: h.structure?.domaine || "",
+        mention: h.structure?.mention || "",
+        parcours: h.structure?.parcours || "",
         et,
         ed,
         ep,
