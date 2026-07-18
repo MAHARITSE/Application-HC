@@ -80,6 +80,9 @@ interface EnseignantRow {
   total_soutenance: number;
   total_recherche: number;
   total_avance: number;
+  total_paye?: number;
+  pourcentage_tranche?: number;
+  nb_paiements?: number;
   obligation: number;
   obligation_custom?: number | null;
   exempte?: boolean;
@@ -346,7 +349,14 @@ export default function HomePage() {
       }
       const irsa = calcIRSA(montantBrut, selectedAnnee?.tauxIRSA || 20, selectedAnnee?.appliquerIRSA ?? true);
       const montantNet = montantBrut - irsa;
-      const net = montantNet - (e.total_avance || 0);
+      // total_avance = avances déduites ; total_paye = montants déjà versés (tranches)
+      const totalAvance = e.total_avance || 0;
+      const totalPaye = e.total_paye || 0;
+      const dejaVerse = totalAvance + totalPaye;
+      const resteAPayer = Math.max(0, montantNet - dejaVerse);
+      const net = resteAPayer; // Net à payer = reste après avances + paiements
+      const pourcentageTranche = Math.min(100, Math.max(0, e.pourcentage_tranche || 0));
+      const trancheLabel = selectedAnnee?.tranche || "—";
 
       return {
         hcBrut,
@@ -357,6 +367,12 @@ export default function HomePage() {
         montantBrut,
         irsa,
         montantNet,
+        totalAvance,
+        totalPaye,
+        dejaVerse,
+        resteAPayer,
+        pourcentageTranche,
+        trancheLabel,
         net,
       };
     },
@@ -383,6 +399,9 @@ export default function HomePage() {
       vacat: filtered.filter((e) => e.statut === "Vacataire").length,
       totalHeures: filtered.reduce((sum, e) => sum + calcHC(e.total_et, e.total_ed, e.total_ep, e.total_soutenance, e.total_recherche, selectedAnnee?.formuleHC || DEFAULT_HC_FORMULA), 0),
       montant: filtered.reduce((sum, e) => sum + calcRow(e).net, 0),
+      totalAvances: filtered.reduce((sum, e) => sum + (calcRow(e).totalAvance || 0), 0),
+      totalPaye: filtered.reduce((sum, e) => sum + (calcRow(e).totalPaye || 0), 0),
+      totalReste: filtered.reduce((sum, e) => sum + (calcRow(e).resteAPayer || 0), 0),
     }),
     [filtered, calcRow, selectedAnnee]
   );
@@ -884,9 +903,11 @@ export default function HomePage() {
     if (!selectedEns || !selectedAnnee) return null;
     const calc = calcRow(selectedEns);
     const montantTranche = Math.round(calc.montantNet * paiementForm.pourcentageTranche / 100);
-    const montantPaye = montantTranche - paiementForm.montantAvance;
-    const resteAPayer = calc.montantNet - (selectedEns.total_avance || 0) - montantPaye;
-    return { ...calc, montantTranche, montantPaye: Math.max(0, montantPaye), resteAPayer: Math.max(0, resteAPayer) };
+    const montantPaye = Math.max(0, montantTranche - paiementForm.montantAvance);
+    // Reste actuel (avant ce paiement) vs reste après enregistrement
+    const resteActuel = calc.resteAPayer;
+    const resteApres = Math.max(0, resteActuel - montantPaye - (paiementForm.montantAvance || 0));
+    return { ...calc, montantTranche, montantPaye, resteActuel, resteApres, resteAPayer: resteApres };
   }, [selectedEns, selectedAnnee, paiementForm, calcRow]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1069,11 +1090,19 @@ export default function HomePage() {
                       "Brut (Ar)",
                       "IRSA",
                       "Net (Ar)",
+                      "Tranche",
+                      "Avance",
+                      "Payé",
+                      "Reste à payer",
                       "Actions",
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-2 sm:px-3 py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-600 text-center whitespace-nowrap"
+                        className={`px-2 sm:px-3 py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-center whitespace-nowrap ${
+                          ["Tranche", "Avance", "Payé", "Reste à payer"].includes(h)
+                            ? "text-amber-800 bg-amber-50/80"
+                            : "text-slate-600"
+                        }`}
                       >
                         {h}
                       </th>
@@ -1083,7 +1112,7 @@ export default function HomePage() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={17} className="text-center py-16 text-slate-400">
+                      <td colSpan={21} className="text-center py-16 text-slate-400">
                         <GraduationCap size={40} className="mx-auto mb-3 opacity-30" />
                         <p className="font-medium">Aucun enseignant avec heures pour {selectedAnnee?.libelle}</p>
                         <p className="text-xs mt-1">Le tableau liste les HC stockés dans la table heures (grade & statut historiques)</p>
@@ -1094,7 +1123,19 @@ export default function HomePage() {
                     </tr>
                   ) : (
                     filtered.map((e, idx) => {
-                      const { hcBrut, obligation, hcArr, montantBrut, irsa, net } = calcRow(e);
+                      const {
+                        hcBrut,
+                        obligation,
+                        hcArr,
+                        montantBrut,
+                        irsa,
+                        montantNet,
+                        totalAvance,
+                        totalPaye,
+                        resteAPayer,
+                        pourcentageTranche,
+                        trancheLabel,
+                      } = calcRow(e);
                       return (
                         <tr key={e.id} className={`hover:bg-indigo-50/50 transition ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}>
                           <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
@@ -1122,7 +1163,51 @@ export default function HomePage() {
                           <td className="px-2 py-2.5 text-center text-xs font-mono">{montantBrut.toLocaleString("fr-MG")}</td>
                           <td className="px-1 py-2.5 text-center text-[11px] font-mono text-red-600">{irsa > 0 ? `-${irsa.toLocaleString("fr-MG")}` : "—"}</td>
                           <td className="px-2 py-2.5 text-center">
-                            <span className={`text-xs font-bold ${net > 0 ? "text-emerald-700" : "text-red-600"}`}>{net.toLocaleString("fr-MG")}</span>
+                            <span className="text-xs font-bold text-slate-800">{montantNet.toLocaleString("fr-MG")}</span>
+                          </td>
+                          {/* Tranche de paiement */}
+                          <td className="px-2 py-2.5 text-center bg-amber-50/40">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[10px] font-medium text-amber-800 leading-tight max-w-[90px] truncate" title={trancheLabel}>
+                                {trancheLabel}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  pourcentageTranche >= 100
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : pourcentageTranche > 0
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                {pourcentageTranche > 0 ? `${pourcentageTranche}%` : "0%"}
+                              </span>
+                            </div>
+                          </td>
+                          {/* Avances */}
+                          <td className="px-2 py-2.5 text-center bg-amber-50/40">
+                            <span className={`text-xs font-mono font-semibold ${totalAvance > 0 ? "text-orange-700" : "text-slate-300"}`}>
+                              {totalAvance > 0 ? totalAvance.toLocaleString("fr-MG") : "—"}
+                            </span>
+                          </td>
+                          {/* Montant déjà payé (tranches) */}
+                          <td className="px-2 py-2.5 text-center bg-amber-50/40">
+                            <span className={`text-xs font-mono font-semibold ${totalPaye > 0 ? "text-blue-700" : "text-slate-300"}`}>
+                              {totalPaye > 0 ? totalPaye.toLocaleString("fr-MG") : "—"}
+                            </span>
+                          </td>
+                          {/* Reste à payer */}
+                          <td className="px-2 py-2.5 text-center bg-amber-50/40">
+                            <span
+                              className={`text-xs font-bold ${
+                                resteAPayer <= 0 ? "text-emerald-600" : resteAPayer < montantNet ? "text-amber-700" : "text-red-600"
+                              }`}
+                            >
+                              {resteAPayer.toLocaleString("fr-MG")}
+                            </span>
+                            {resteAPayer <= 0 && montantNet > 0 && (
+                              <div className="text-[9px] text-emerald-600 font-medium">Soldé</div>
+                            )}
                           </td>
                           <td className="px-1 py-2.5">
                             <div className="flex items-center justify-center gap-0.5">
@@ -1152,9 +1237,17 @@ export default function HomePage() {
             </div>
           )}
           {filtered.length > 0 && (
-            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>{filtered.length} enseignant(s) – Année {selectedAnnee?.libelle} – Grade/Statut issus de la table heures (historique)</span>
-              <span className="font-semibold text-indigo-700">Total Net : {formatAriary(stats.montant)}</span>
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <span>
+                {filtered.length} enseignant(s) – Année {selectedAnnee?.libelle}
+                {selectedAnnee?.tranche ? ` – ${selectedAnnee.tranche}` : ""}
+              </span>
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 font-semibold">
+                <span className="text-orange-700">Avances : {formatAriary(stats.totalAvances)}</span>
+                <span className="text-blue-700">Payé : {formatAriary(stats.totalPaye)}</span>
+                <span className="text-red-700">Reste à payer : {formatAriary(stats.totalReste)}</span>
+                <span className="text-indigo-700">Total Net : {formatAriary(stats.montant)}</span>
+              </div>
             </div>
           )}
         </div>
@@ -1707,12 +1800,22 @@ export default function HomePage() {
                     <td className="px-3 py-2 text-right">{paiementPreview.montantNet.toLocaleString()} Ar</td>
                   </tr>
                   <tr className="border-b">
-                    <td className="px-3 py-2">Déjà avancé/payé</td>
-                    <td className="px-3 py-2 text-right">-{selectedEns.total_avance.toLocaleString()} Ar</td>
+                    <td className="px-3 py-2">Tranche en cours</td>
+                    <td className="px-3 py-2 text-right font-medium text-amber-800">
+                      {selectedAnnee?.tranche || "—"} ({paiementPreview.pourcentageTranche || 0}% déjà versé)
+                    </td>
                   </tr>
-                  <tr className="bg-amber-50 font-bold">
-                    <td className="px-3 py-2">Net à payer (selon prompt.md)</td>
-                    <td className="px-3 py-2 text-right text-amber-800">{paiementPreview.net.toLocaleString()} Ar</td>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Avances déjà déduites</td>
+                    <td className="px-3 py-2 text-right text-orange-700">-{(selectedEns.total_avance || 0).toLocaleString()} Ar</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Déjà payé (tranches)</td>
+                    <td className="px-3 py-2 text-right text-blue-700">-{(selectedEns.total_paye || 0).toLocaleString()} Ar</td>
+                  </tr>
+                  <tr className="bg-red-50 font-bold">
+                    <td className="px-3 py-2">Reste à payer actuel</td>
+                    <td className="px-3 py-2 text-right text-red-700">{paiementPreview.resteActuel.toLocaleString()} Ar</td>
                   </tr>
                 </tbody>
               </table>
@@ -1764,7 +1867,11 @@ export default function HomePage() {
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
               <p className="text-xs text-emerald-700 mb-1">Montant de cette tranche ({paiementForm.pourcentageTranche}%)</p>
               <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{paiementPreview.montantPaye.toLocaleString("fr-MG")} Ar</p>
-              {paiementPreview.resteAPayer > 0 && <p className="text-xs text-slate-500 mt-1">Reste à payer: {paiementPreview.resteAPayer.toLocaleString()} Ar</p>}
+              {paiementPreview.resteApres > 0 ? (
+                <p className="text-xs text-slate-500 mt-1">Reste après ce paiement : {paiementPreview.resteApres.toLocaleString()} Ar</p>
+              ) : (
+                <p className="text-xs text-emerald-600 font-medium mt-1">Soldé après ce paiement</p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 sm:gap-3">
