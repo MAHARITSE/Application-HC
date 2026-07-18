@@ -50,12 +50,22 @@ export async function GET(request: Request) {
     const allFacultes = getFacultes();
     const allPaiements = getPaiements().filter((p) => p.anneeId === anneeIdNum);
 
-    // Paiements groupés par enseignant
-    const paiementsMap = new Map<number, { totalAvance: number; totalPaye: number }>();
+    // Paiements groupés par enseignant (avances, payé, % tranche cumulé)
+    const paiementsMap = new Map<
+      number,
+      { totalAvance: number; totalPaye: number; pourcentageTranche: number; nbPaiements: number }
+    >();
     for (const p of allPaiements) {
-      const cur = paiementsMap.get(p.enseignantId) || { totalAvance: 0, totalPaye: 0 };
+      const cur = paiementsMap.get(p.enseignantId) || {
+        totalAvance: 0,
+        totalPaye: 0,
+        pourcentageTranche: 0,
+        nbPaiements: 0,
+      };
       cur.totalAvance += p.montantAvance || 0;
       cur.totalPaye += p.montantPaye || 0;
+      cur.pourcentageTranche += p.pourcentageTranche || 0;
+      cur.nbPaiements += 1;
       paiementsMap.set(p.enseignantId, cur);
     }
 
@@ -147,6 +157,8 @@ export async function GET(request: Request) {
         total_recherche: agg.total_recherche,
         total_avance: paie ? paie.totalAvance : 0,
         total_paye: paie ? paie.totalPaye : 0,
+        pourcentage_tranche: paie ? Math.min(paie.pourcentageTranche, 100) : 0,
+        nb_paiements: paie ? paie.nbPaiements : 0,
         obligation: agg.derniereObligation,
         obligation_custom: agg.derniereObligation,
         exempte: agg.derniereObligation === 0,

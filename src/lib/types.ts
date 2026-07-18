@@ -61,6 +61,9 @@ export interface EnseignantRow {
   total_soutenance: number;
   total_recherche: number;
   total_avance: number;
+  total_paye?: number;
+  pourcentage_tranche?: number;
+  nb_paiements?: number;
   obligation: number; // obligation appliquée (dernier ou moyenne)
   hcBrut: number;
   hcNette: number;
