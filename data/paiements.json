@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": 1,
+    "enseignantId": 18,
+    "anneeId": 3,
+    "montantAvance": 0,
+    "dateAvance": null,
+    "pourcentageTranche": 20,
+    "montantPaye": 19200,
+    "datePaiement": "2026-07-18",
+    "reference": null,
+    "statut": "Partiel",
+    "createdAt": "2026-07-18T06:25:56.219Z"
+  }
+]
