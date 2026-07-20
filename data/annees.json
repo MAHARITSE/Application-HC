@@ -21,10 +21,10 @@
     "id": 3,
     "libelle": "2025-2026",
     "tranche": "Première tranche",
-    "active": false,
-    "appliquerIRSA": true,
+    "active": true,
+    "appliquerIRSA": false,
     "tauxIRSA": 20,
-    "plafondPaiement": null,
+    "plafondPaiement": "5000000",
     "formuleHC": "ET*5/3+ED+EP/2+Sout.+Rech."
   }
 ]

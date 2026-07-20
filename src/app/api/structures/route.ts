@@ -4,6 +4,11 @@ import {
   createStructure,
   updateStructure,
   deleteStructure,
+  getEtablissements,
+  getDomaines,
+  createEtablissement,
+  createDomaine,
+  createMention,
 } from "@/db";
 
 export async function GET(request: Request) {
@@ -12,6 +17,13 @@ export async function GET(request: Request) {
     const q = searchParams.get("q")?.trim();
     const field = searchParams.get("field");
     const distinct = searchParams.get("distinct") === "true";
+
+    const level = searchParams.get("level");
+    if (level === "etablissements") return NextResponse.json(getEtablissements().sort((a, b) => a.etablissement.localeCompare(b.etablissement)));
+    if (level === "domaines") {
+      const etablissementId = Number(searchParams.get("etablissementId"));
+      return NextResponse.json(getDomaines().filter((item) => !etablissementId || item.etablissementId === etablissementId).sort((a, b) => a.domaine.localeCompare(b.domaine)));
+    }
 
     let facultes = getStructures();
 
@@ -55,6 +67,20 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    // Gestion normalisée, utilisée par les trois onglets de la structure.
+    if (body.level === "etablissement") {
+      if (!body.etablissement?.trim()) return NextResponse.json({ error: "Établissement obligatoire" }, { status: 400 });
+      return NextResponse.json(createEtablissement(body.etablissement));
+    }
+    if (body.level === "domaine") {
+      if (!body.etablissementId || !body.domaine?.trim()) return NextResponse.json({ error: "Établissement et domaine obligatoires" }, { status: 400 });
+      return NextResponse.json(createDomaine(Number(body.etablissementId), body.domaine));
+    }
+    if (body.level === "mention") {
+      if (!body.domaineId || !body.mention?.trim()) return NextResponse.json({ error: "Établissement, domaine et mention obligatoires" }, { status: 400 });
+      return NextResponse.json(createMention(Number(body.domaineId), body.mention, body.parcours || null));
+    }
 
     const etablissement = body.etablissement?.trim();
     const domaine = body.domaine?.trim();

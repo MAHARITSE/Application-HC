@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
   CreditCard,
+  ArrowDownToLine,
   Wallet,
   Download,
   Printer,
@@ -51,6 +52,9 @@ interface Faculte {
   parcours: string | null;
   code: string | null;
 }
+interface EtablissementOption { id: number; etablissement: string }
+interface DomaineOption { id: number; etablissementId: number; domaine: string }
+
 interface EnseignantRow {
   id: number;
   nom: string;
@@ -200,6 +204,10 @@ export default function HomePage() {
   const [editingFacId, setEditingFacId] = useState<number | null>(null);
   const [facSuggestions, setFacSuggestions] = useState<Record<string, string[]>>({});
   const [facError, setFacError] = useState("");
+  const [structureTab, setStructureTab] = useState<"etablissement" | "domaine" | "mention">("etablissement");
+  const [etablissements, setEtablissements] = useState<EtablissementOption[]>([]);
+  const [domaines, setDomaines] = useState<DomaineOption[]>([]);
+  const [structureForm, setStructureForm] = useState({ etablissement: "", etablissementId: "", domaine: "", domaineId: "", mention: "", parcours: "" });
 
   const [anneeForm, setAnneeForm] = useState({
     libelle: "",
@@ -238,6 +246,11 @@ export default function HomePage() {
   });
   const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
   const [batchFichesData, setBatchFichesData] = useState<any[]>([]);
+
+  // Avance
+  const [showAvanceModal, setShowAvanceModal] = useState(false);
+  const [avanceForm, setAvanceForm] = useState({ montantAvance: 0, dateAvance: new Date().toISOString().slice(0, 10), reference: "" });
+  const [selectedEnsForAvance, setSelectedEnsForAvance] = useState<EnseignantRow | null>(null);
 
 
 
@@ -287,8 +300,14 @@ export default function HomePage() {
   }, []);
 
   const loadFacultes = useCallback(async () => {
-    const res = await fetch("/api/structures");
-    setFacultes(await res.json());
+    const [structuresRes, etablissementsRes, domainesRes] = await Promise.all([
+      fetch("/api/structures"),
+      fetch("/api/structures?level=etablissements"),
+      fetch("/api/structures?level=domaines"),
+    ]);
+    setFacultes(await structuresRes.json());
+    setEtablissements(await etablissementsRes.json());
+    setDomaines(await domainesRes.json());
   }, []);
 
   const loadAllEnseignants = useCallback(async () => {
@@ -821,6 +840,38 @@ export default function HomePage() {
     await loadEnseignants();
   };
 
+  // ── Avance ─────────────────────────────────────────────────────────────────
+  const handleOpenAvance = (e: EnseignantRow) => {
+    setSelectedEnsForAvance(e);
+    setAvanceForm({ montantAvance: 0, dateAvance: new Date().toISOString().slice(0, 10), reference: "" });
+    setShowAvanceModal(true);
+  };
+
+  const handleSaveAvance = async () => {
+    if (!selectedEnsForAvance || !selectedAnnee || avanceForm.montantAvance <= 0) {
+      alert("Veuillez saisir un montant d'avance supérieur à 0.");
+      return;
+    }
+    await fetch("/api/paiements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enseignantId: selectedEnsForAvance.id,
+        anneeId: selectedAnnee.id,
+        montantAvance: avanceForm.montantAvance,
+        dateAvance: avanceForm.dateAvance || null,
+        montantPaye: 0,
+        pourcentageTranche: 0,
+        datePaiement: null,
+        reference: avanceForm.reference || null,
+        statut: "Avance",
+      }),
+    });
+    setShowAvanceModal(false);
+    await loadEnseignants();
+    alert("Avance enregistrée avec succès dans la table paiements.");
+  };
+
   // ── Structure académique ────────────────────────────────────────────────────────────────
   const handleSaveFac = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -845,6 +896,27 @@ export default function HomePage() {
     }
   };
 
+  const handleSaveStructureLevel = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFacError("");
+    const body = structureTab === "etablissement"
+      ? { level: "etablissement", etablissement: structureForm.etablissement }
+      : structureTab === "domaine"
+        ? { level: "domaine", etablissementId: Number(structureForm.etablissementId), domaine: structureForm.domaine }
+        : { level: "mention", domaineId: Number(structureForm.domaineId), mention: structureForm.mention, parcours: structureForm.parcours };
+    try {
+      const response = await fetch("/api/structures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json();
+      if (!response.ok) { setFacError(data.error || "Erreur lors de l'enregistrement"); return; }
+      setStructureForm((form) => structureTab === "etablissement"
+        ? { ...form, etablissement: "" }
+        : structureTab === "domaine"
+          ? { ...form, domaine: "" }
+          : { ...form, mention: "", parcours: "" });
+      await loadFacultes();
+    } catch { setFacError("Impossible d'enregistrer la structure"); }
+  };
+
   const handleEditFac = (f: Faculte) => {
     setEditingFacId(f.id);
     setFacForm({
@@ -860,6 +932,35 @@ export default function HomePage() {
     if (!confirm("Supprimer cette structure académique ?")) return;
     await fetch(`/api/structures?id=${id}`, { method: "DELETE" });
     loadFacultes();
+  };
+
+  const handleStructureRowClick = (f: Faculte) => {
+    // Remettre en haut pour modification : remplir le formulaire du niveau le plus complet
+    // Recherche des IDs correspondants
+    const etab = etablissements.find((et) => et.etablissement === f.etablissement);
+    const etabId = etab ? String(etab.id) : "";
+    const dom = domaines.find((d) => d.domaine === f.domaine && (etabId ? d.etablissementId === Number(etabId) : true));
+    const domId = dom ? String(dom.id) : "";
+
+    // On bascule vers l'onglet mention pour afficher tous les champs, et on remplit structureForm
+    setStructureTab("mention");
+    setStructureForm({
+      etablissement: f.etablissement || "",
+      etablissementId: etabId,
+      domaine: f.domaine || "",
+      domaineId: domId,
+      mention: f.mention || "",
+      parcours: f.parcours || "",
+    });
+    setFacError("");
+    // Pour compatibilité avec l'ancien formulaire facForm si utilisé
+    setEditingFacId(f.id);
+    setFacForm({
+      etablissement: f.etablissement || "",
+      domaine: f.domaine || "",
+      mention: f.mention || "",
+      parcours: f.parcours || "",
+    });
   };
 
   // ── Années ──────────────────────────────────────────────────────────────────
@@ -1138,7 +1239,12 @@ export default function HomePage() {
                         trancheLabel,
                       } = calcRow(e);
                       return (
-                        <tr key={e.id} className={`hover:bg-indigo-50/50 transition ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}>
+                        <tr
+                          key={e.id}
+                          onDoubleClick={() => handleOpenHeures(e)}
+                          title="Double-clic sur la ligne pour gérer les heures (grade/statut historiques)"
+                          className={`hover:bg-indigo-50/50 transition cursor-pointer ${e.statut === "Permanent" ? "bg-purple-50/10" : "bg-emerald-50/10"}`}
+                        >
                           <td className="px-2 py-2.5 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
                           <td className="px-2 py-2.5 font-semibold text-slate-800 whitespace-nowrap max-w-[180px]">
                             <div className="truncate">{e.nomPrenom}</div>
@@ -1210,8 +1316,8 @@ export default function HomePage() {
                               <div className="text-[9px] text-emerald-600 font-medium">Soldé</div>
                             )}
                           </td>
-                          <td className="px-1 py-2.5">
-                            <div className="flex items-center justify-center gap-0.5">
+                          <td className="px-1 py-2.5" onDoubleClick={(ev) => ev.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-0.5" onDoubleClick={(ev) => ev.stopPropagation()}>
                               <button onClick={() => handleEditEns(e)} title="Modifier infos base (sans grade/statut)" className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 transition">
                                 <Edit size={14} />
                               </button>
@@ -1220,6 +1326,9 @@ export default function HomePage() {
                               </button>
                               <button onClick={() => handleOpenPaiement(e)} title="Préparer paiement" className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition">
                                 <Wallet size={14} />
+                              </button>
+                              <button onClick={() => handleOpenAvance(e)} title="Faire une avance" className="p-1.5 rounded-lg text-orange-600 hover:bg-orange-100 transition">
+                                <ArrowDownToLine size={14} />
                               </button>
                               <button onClick={() => handleOpenFiche(e)} title="Fiche individuelle" className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition">
                                 <FileText size={14} />
@@ -1429,13 +1538,7 @@ export default function HomePage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-2">Heures complémentaires</label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <NumInput label="ET" value={heuresHCForm.heuresET} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresET: v })} />
-                  <NumInput label="ED" value={heuresHCForm.heuresED} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresED: v })} />
-                  <NumInput label="EP" value={heuresHCForm.heuresEP} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresEP: v })} />
-                  <NumInput label="Soutenance" value={heuresHCForm.heuresSoutenance} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresSoutenance: v })} />
-                  <NumInput label="Recherche" value={heuresHCForm.heuresRecherche} onChange={(v) => setHeuresHCForm({ ...heuresHCForm, heuresRecherche: v })} />
-                </div>
+                <HeuresFields form={heuresHCForm} onChange={(field, value) => setHeuresHCForm({ ...heuresHCForm, [field]: value })} />
               </div>
 
               {/* Aperçu calcul selon prompt.md */}
@@ -1550,7 +1653,12 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAllEns.map((e) => (
-                  <tr key={e.id} className="hover:bg-slate-50">
+                  <tr
+                    key={e.id}
+                    className="hover:bg-slate-50 cursor-pointer"
+                    onClick={() => handleEditEns(e)}
+                    title="Cliquer sur la ligne pour modifier (remettre en haut)"
+                  >
                     <td className="px-3 py-2 font-bold">{e.nom}</td>
                     <td className="px-3 py-2">{e.prenom || "—"}</td>
                     <td className="px-3 py-2 text-xs">{e.cin || "—"}</td>
@@ -1560,10 +1668,18 @@ export default function HomePage() {
                     <td className={`px-3 py-2 text-xs max-w-[150px] truncate ${e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "text-orange-600 font-semibold" : ""}`} title={e.rib && e.rib.replace(/\D/g, "").length !== 23 ? "RIB incohérent" : e.rib || ""}>{e.rib || "—"}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
-                        <button onClick={() => handleEditEns(e)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); handleEditEns(e); }}
+                          className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                          title="Modifier"
+                        >
                           <Edit size={14} />
                         </button>
-                        <button onClick={() => handleDeleteEns(e.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); handleDeleteEns(e.id); }}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded"
+                          title="Supprimer"
+                        >
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -1652,11 +1768,7 @@ export default function HomePage() {
                   ))}
                 </select>
               </div>
-              <NumInput label="ET" value={heuresForm.heuresET} onChange={(v) => setHeuresForm({ ...heuresForm, heuresET: v })} />
-              <NumInput label="ED" value={heuresForm.heuresED} onChange={(v) => setHeuresForm({ ...heuresForm, heuresED: v })} />
-              <NumInput label="EP" value={heuresForm.heuresEP} onChange={(v) => setHeuresForm({ ...heuresForm, heuresEP: v })} />
-              <NumInput label="Soutenance" value={heuresForm.heuresSoutenance} onChange={(v) => setHeuresForm({ ...heuresForm, heuresSoutenance: v })} />
-              <NumInput label="Recherche" value={heuresForm.heuresRecherche} onChange={(v) => setHeuresForm({ ...heuresForm, heuresRecherche: v })} />
+              <div className="sm:col-span-3"><HeuresFields form={heuresForm} onChange={(field, value) => setHeuresForm({ ...heuresForm, [field]: value })} /></div>
             </div>
             <div className="flex gap-2">
               <button
@@ -1705,7 +1817,12 @@ export default function HomePage() {
                 {heuresList.map((h) => {
                   const total = (h.heuresET || 0) + (h.heuresED || 0) + (h.heuresEP || 0) + (h.heuresSoutenance || 0) + (h.heuresRecherche || 0);
                   return (
-                    <tr key={h.id} className={`hover:bg-indigo-50/50 ${editingHeureId === h.id ? "bg-yellow-50" : ""}`}>
+                    <tr
+                      key={h.id}
+                      onClick={() => handleEditHeure(h)}
+                      title="Cliquer pour remettre en haut pour modification"
+                      className={`hover:bg-indigo-50/50 cursor-pointer ${editingHeureId === h.id ? "bg-yellow-50 ring-2 ring-yellow-300" : ""}`}
+                    >
                       <td className="px-2 py-2 text-center">
                         <GradeBadge grade={h.grade?.code || "-"} />
                       </td>
@@ -1724,10 +1841,18 @@ export default function HomePage() {
                       <td className="px-1 py-2 text-center text-orange-600">{h.obligation}</td>
                       <td className="px-1 py-2 text-center">
                         <div className="flex gap-1 justify-center">
-                          <button onClick={() => handleEditHeure(h)} className="p-1 text-indigo-600 hover:bg-indigo-100 rounded">
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); handleEditHeure(h); }}
+                            className="p-1 text-indigo-600 hover:bg-indigo-100 rounded"
+                            title="Modifier (remettre en haut)"
+                          >
                             <Edit size={12} />
                           </button>
-                          <button onClick={() => handleDeleteHeures(h.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); handleDeleteHeures(h.id); }}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            title="Supprimer"
+                          >
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -1887,55 +2012,126 @@ export default function HomePage() {
         )}
       </Modal>
 
+      {/* Modal Avance */}
+      <Modal isOpen={showAvanceModal} onClose={() => setShowAvanceModal(false)} title="💰 Enregistrer une Avance" size="md">
+        {selectedEnsForAvance && (
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-900">
+              <p className="font-semibold">Enseignant : {selectedEnsForAvance.nomPrenom} — Année : {selectedAnnee?.libelle}</p>
+              <p>Cette avance sera enregistrée dans la table paiements avec le statut <strong>Avance</strong> et un montant payé de 0.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Montant de l&apos;avance (Ar) *</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={avanceForm.montantAvance}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, montantAvance: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                  placeholder="Ex: 50000"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Date de l&apos;avance</label>
+                <input
+                  type="date"
+                  value={avanceForm.dateAvance}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, dateAvance: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-slate-700 mb-1">Référence (optionnel)</label>
+                <input
+                  type="text"
+                  value={avanceForm.reference}
+                  onChange={(e) => setAvanceForm({ ...avanceForm, reference: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+                  placeholder="Ex: AV-001"
+                />
+              </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+              <p className="text-xs text-amber-800 mb-1">Montant à enregistrer comme avance</p>
+              <p className="text-xl font-bold text-amber-700">{(avanceForm.montantAvance || 0).toLocaleString("fr-MG")} Ar</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAvanceModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Annuler</button>
+              <button onClick={handleSaveAvance} className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 shadow-md">
+                <ArrowDownToLine size={16} /> Enregistrer l&apos;avance
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Modal Fiche */}
       <Modal isOpen={showFicheModal} onClose={() => setShowFicheModal(false)} title="📄 Fiche Individuelle de Paiement" size="full">
         {ficheData && <FicheIndividuelle data={ficheData as any} />}
       </Modal>
 
       {/* Modal Structure académique */}
-      <Modal isOpen={showFacModal} onClose={() => { setShowFacModal(false); setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); setFacError(""); }} title="🏛️ Structure Académique" size="xl">
+      <Modal isOpen={showFacModal} onClose={() => { setShowFacModal(false); setFacError(""); }} title="🏛️ Structure Académique" size="xl">
         <div className="space-y-4">
-          <form onSubmit={handleSaveFac} className="bg-slate-50 rounded-lg p-4 space-y-3 border">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Établissement *</label>
-                <input value={facForm.etablissement} onChange={(e) => handleFacFieldChange("etablissement", e.target.value)} list="etablissement-list" required placeholder="Ex: Université de Toliara" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="etablissement-list">{facSuggestions.etablissement?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+          <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Niveaux de structure">
+            {([
+              ["etablissement", "Établissement"],
+              ["domaine", "Domaine"],
+              ["mention", "Mention & parcours"],
+            ] as const).map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => { setStructureTab(tab); setFacError(""); }} className={`rounded-md px-2 py-2 text-xs sm:text-sm font-semibold transition ${structureTab === tab ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {label}{tab === "etablissement" ? " *" : tab === "domaine" ? " *" : " *"}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSaveStructureLevel} className="rounded-lg border bg-slate-50 p-4">
+            {structureTab === "etablissement" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">Ajoutez un établissement. Il sera ensuite disponible dans l&apos;onglet Domaine.</p>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><input required value={structureForm.etablissement} onChange={(e) => setStructureForm({ ...structureForm, etablissement: e.target.value })} placeholder="Ex. Université de Toliara" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Domaine *</label>
-                <input value={facForm.domaine} onChange={(e) => handleFacFieldChange("domaine", e.target.value)} list="domaine-list" required placeholder="Ex: Sciences et Technologies" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="domaine-list">{facSuggestions.domaine?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+            )}
+            {structureTab === "domaine" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><select required value={structureForm.etablissementId} onChange={(e) => setStructureForm({ ...structureForm, etablissementId: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"><option value="">-- Sélectionner l&apos;établissement --</option>{etablissements.map((item) => <option key={item.id} value={item.id}>{item.etablissement}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Domaine *</label><input required value={structureForm.domaine} onChange={(e) => setStructureForm({ ...structureForm, domaine: e.target.value })} placeholder="Ex. Sciences et Technologies" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Mention *</label>
-                <input value={facForm.mention} onChange={(e) => handleFacFieldChange("mention", e.target.value)} list="mention-list" required placeholder="Ex: Informatique" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="mention-list">{facSuggestions.mention?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
+            )}
+            {structureTab === "mention" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Établissement *</label><select required value={structureForm.etablissementId} onChange={(e) => setStructureForm({ ...structureForm, etablissementId: e.target.value, domaineId: "" })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"><option value="">-- Sélectionner --</option>{etablissements.map((item) => <option key={item.id} value={item.id}>{item.etablissement}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Domaine *</label><select required value={structureForm.domaineId} onChange={(e) => setStructureForm({ ...structureForm, domaineId: e.target.value })} disabled={!structureForm.etablissementId} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-100"><option value="">-- Sélectionner --</option>{domaines.filter((item) => item.etablissementId === Number(structureForm.etablissementId)).map((item) => <option key={item.id} value={item.id}>{item.domaine}</option>)}</select></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Mention *</label><input required value={structureForm.mention} onChange={(e) => setStructureForm({ ...structureForm, mention: e.target.value })} placeholder="Ex. Informatique" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
+                <div><label className="mb-1 block text-xs font-semibold text-slate-700">Parcours</label><input value={structureForm.parcours} onChange={(e) => setStructureForm({ ...structureForm, parcours: e.target.value })} placeholder="Optionnel" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" /></div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Parcours (optionnel)</label>
-                <input value={facForm.parcours} onChange={(e) => handleFacFieldChange("parcours", e.target.value)} list="parcours-list" placeholder="Ex: Génie Logiciel" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white" />
-                <datalist id="parcours-list">{facSuggestions.parcours?.map((s: string, i: number) => <option key={i} value={s} />)}</datalist>
-              </div>
-            </div>
-            {facError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{facError}</p>}
-            <div className="flex gap-2">
-              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"><Plus size={16} /> {editingFacId ? "Mettre à jour" : "Ajouter la structure"}</button>
-              {editingFacId && (<button type="button" onClick={() => { setEditingFacId(null); setFacForm({ etablissement: "", domaine: "", mention: "", parcours: "" }); }} className="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-white">Annuler édition</button>)}
-            </div>
+            )}
+            {facError && <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-600">{facError}</p>}
+            <button type="submit" className="mt-4 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"><Plus size={16} /> Ajouter</button>
           </form>
 
-          <div className="overflow-x-auto max-h-[400px] border rounded-lg">
+          <div className="max-h-[300px] overflow-x-auto rounded-lg border">
+            <p className="px-3 py-2 text-[11px] text-slate-500 bg-slate-50 border-b">💡 Astuce : cliquez sur une ligne pour remettre en haut pour modification (comme dans la saisie des heures)</p>
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 sticky top-0"><tr>{["Établissement", "Domaine", "Mention", "Parcours", ""].map((h: string) => (<th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>))}</tr></thead>
-              <tbody className="divide-y divide-slate-100">{facultes.map((f: Faculte) => (<tr key={f.id} onClick={() => handleEditFac(f)} className={`hover:bg-purple-50 cursor-pointer ${editingFacId === f.id ? "bg-yellow-50" : ""}`}>
-                <td className="px-2 py-2 font-medium truncate max-w-[150px]">{f.etablissement}</td>
-                <td className="px-2 py-2 truncate max-w-[120px]">{f.domaine}</td>
-                <td className="px-2 py-2 truncate max-w-[120px]">{f.mention}</td>
-                <td className="px-2 py-2">{f.parcours || "—"}</td>
-                <td className="px-2 py-2 text-center"><button onClick={(ev) => { ev.stopPropagation(); handleDeleteFac(f.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Supprimer"><Trash2 size={14} /></button></td>
-              </tr>))}</tbody>
+              <thead className="sticky top-0 bg-slate-50"><tr>{["Établissement", "Domaine", "Mention", "Parcours"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600">{h}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {facultes.map((f) => (
+                  <tr
+                    key={f.id}
+                    onClick={() => handleStructureRowClick(f)}
+                    className="hover:bg-purple-50 cursor-pointer transition"
+                    title="Cliquer pour remettre en haut pour modification"
+                  >
+                    <td className="px-3 py-2">{f.etablissement}</td>
+                    <td className="px-3 py-2">{f.domaine}</td>
+                    <td className="px-3 py-2">{f.mention}</td>
+                    <td className="px-3 py-2">{f.parcours || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
+            {facultes.length === 0 && <p className="text-center py-4 text-slate-400 text-xs">Aucune structure</p>}
           </div>
         </div>
       </Modal>
@@ -2393,6 +2589,22 @@ function StatCard({ icon, label, value, sub, color }: { icon: React.ReactNode; l
         <div className="text-[10px] sm:text-xs text-slate-400 truncate">{sub}</div>
       </div>
       <div className={`h-1 bg-gradient-to-r ${colors[color]}`} />
+    </div>
+  );
+}
+
+function HeuresFields({ form, onChange }: { form: { heuresET: number; heuresED: number; heuresEP: number; heuresSoutenance: number; heuresRecherche: number }; onChange: (field: "heuresET" | "heuresED" | "heuresEP" | "heuresSoutenance" | "heuresRecherche", value: number) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr]">
+      <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+        <NumInput label="ET" value={form.heuresET} onChange={(v) => onChange("heuresET", v)} />
+        <NumInput label="ED" value={form.heuresED} onChange={(v) => onChange("heuresED", v)} />
+        <NumInput label="EP" value={form.heuresEP} onChange={(v) => onChange("heuresEP", v)} />
+      </div>
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+        <NumInput label="Sout." value={form.heuresSoutenance} onChange={(v) => onChange("heuresSoutenance", v)} />
+        <NumInput label="Rech." value={form.heuresRecherche} onChange={(v) => onChange("heuresRecherche", v)} />
+      </div>
     </div>
   );
 }

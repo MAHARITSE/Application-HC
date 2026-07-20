@@ -9,19 +9,26 @@ import path from "path";
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch {
+    // Système de fichiers en lecture seule (ex : déploiement serverless
+    // Netlify/Vercel). On ignore : l'application fonctionne alors en lecture
+    // seule sur les données livrées avec le build.
   }
 }
 
 function readJson<T>(filename: string, defaultValue: T[] = []): T[] {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, filename);
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
-    return defaultValue;
-  }
   try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+      // Pas d'écriture ici : en lecture seule on retourne simplement la valeur
+      // par défaut pour ne jamais faire échouer une lecture (route GET).
+      return defaultValue;
+    }
     const content = fs.readFileSync(filePath, "utf8");
     return JSON.parse(content) || defaultValue;
   } catch {
@@ -30,9 +37,21 @@ function readJson<T>(filename: string, defaultValue: T[] = []): T[] {
 }
 
 function writeJson<T>(filename: string, data: T[]) {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, filename);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, filename);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const isReadOnly = /read-only|EROFS|EACCES|permission/i.test(msg);
+    if (isReadOnly) {
+      throw new Error(
+        "Stockage en lecture seule : l'écriture n'est pas prise en charge sur ce déploiement (serverless). " +
+          "Les données affichées proviennent des fichiers livrés avec le build."
+      );
+    }
+    throw new Error(`Échec d'écriture de ${filename} : ${msg}`);
+  }
 }
 
 // Auto-increment helper
@@ -207,6 +226,43 @@ export function saveEtablissements(data: Etablissement[]) {
 export function getDomaines(): Domaine[] {
   migrateLegacyFacultesIfNeeded();
   return readJson<Domaine>("domaines.json");
+}
+
+export function createEtablissement(etablissement: string): Etablissement {
+  const list = getEtablissements();
+  if (list.some((item) => sameText(item.etablissement, etablissement))) throw new Error("Cet établissement existe déjà");
+  const item = { id: nextId(list), etablissement: etablissement.trim() };
+  list.push(item);
+  saveEtablissements(list);
+  return item;
+}
+
+export function createDomaine(etablissementId: number, domaine: string): Domaine {
+  const etablissements = getEtablissements();
+  if (!etablissements.some((item) => item.id === etablissementId)) throw new Error("Établissement introuvable");
+  const list = getDomaines();
+  if (list.some((item) => item.etablissementId === etablissementId && sameText(item.domaine, domaine))) throw new Error("Ce domaine existe déjà pour cet établissement");
+  const item = { id: nextId(list), etablissementId, domaine: domaine.trim() };
+  list.push(item);
+  saveDomaines(list);
+  return item;
+}
+
+export function createMention(domaineId: number, mention: string, parcours: string | null): Parcours {
+  if (!getDomaines().some((item) => item.id === domaineId)) throw new Error("Domaine introuvable");
+  const mentions = getMentions();
+  let currentMention = mentions.find((item) => item.domaineId === domaineId && sameText(item.mention, mention));
+  if (!currentMention) {
+    currentMention = { id: nextId(mentions), domaineId, mention: mention.trim() };
+    mentions.push(currentMention);
+    saveMentions(mentions);
+  }
+  const parcoursList = getParcours();
+  if (parcoursList.some((item) => item.mentionId === currentMention!.id && sameText(item.parcours, parcours))) throw new Error("Cette mention et ce parcours existent déjà");
+  const item = { id: nextId(parcoursList), mentionId: currentMention.id, parcours: parcours?.trim() || null };
+  parcoursList.push(item);
+  saveParcours(parcoursList);
+  return item;
 }
 export function saveDomaines(data: Domaine[]) {
   writeJson("domaines.json", data);
