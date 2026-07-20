@@ -342,25 +342,6 @@
     "updatedAt": "2026-07-17T16:06:19.144Z"
   },
   {
-    "id": 19,
-    "nom": "DAUPHIN",
-    "prenom": "Rakotondrabe",
-    "cin": "501 991 039 091",
-    "dateCIN": null,
-    "dateNaissance": null,
-    "lieuNaissance": null,
-    "nationalite": "Malagasy",
-    "adresse": null,
-    "telephone": "032 04 648 85",
-    "email": null,
-    "rib": null,
-    "specialite": "Biodiversité",
-    "etablissementPrincipal": "SCIENCES",
-    "dateRecrutement": null,
-    "createdAt": "2026-07-17T16:06:19.144Z",
-    "updatedAt": "2026-07-17T16:06:19.144Z"
-  },
-  {
     "id": 20,
     "nom": "DAUPHIN",
     "prenom": "Rakotondrabe",
